@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>온·습도 관리 | NTL 품질팀</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --navy:#183b63; --navy2:#24507f; --ink:#1c1c1c; --line:#56677a; --soft:#eef2f6;
+  --ok:#1e7d3a; --okbg:#e3f3e7; --warn:#a86b00; --warnbg:#fff1bf; --ng:#c62828; --ngbg:#ffd9d9;
+  --gray:#8a95a1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff;color:var(--ink);font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif}
+button{font:inherit;cursor:pointer;border:2px solid var(--navy);background:#fff;color:var(--navy);font-weight:700;padding:7px 14px;border-radius:4px}
+button:hover{background:var(--soft)}
+button.pri{background:var(--navy);color:#fff}
+button.pri:hover{background:var(--navy2)}
+button:focus-visible,.tile:focus-visible{outline:3px solid #f2b705;outline-offset:2px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 18px;background:var(--navy);color:#fff}
+.top .brand b{font-size:20px;margin-right:10px}
+.top .brand span{opacity:.85;font-size:13px}
+.top .basis{font-size:14px;background:#fff;color:var(--navy);padding:6px 12px;border-radius:4px;font-weight:700}
+.top .basis b{font-size:17px;margin-left:6px}
+.top .sync{font-size:13px;font-weight:700;padding:4px 10px;border-radius:4px;background:#2c5586}
+.top .sync.err{background:var(--ng)}
+.top .clock{font-size:15px;font-weight:800}
+.embed .top .brand{display:none}
+.alert{background:var(--ngbg);border:2px solid var(--ng);color:var(--ng);font-weight:800;padding:10px 14px;border-radius:4px;margin:6px 0 10px;font-size:15px}
+.card input.url{width:100%;font:inherit;padding:5px 8px;border:2px solid var(--line);border-radius:4px}
+.top .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.top .acts button{border-color:#fff}
+.std{display:flex;flex-wrap:wrap;gap:6px 22px;padding:8px 18px;background:var(--soft);border-bottom:2px solid var(--line);font-size:14px;font-weight:700}
+.std span em{font-style:normal;color:var(--navy)}
+main{padding:14px 18px 40px;max-width:1500px;margin:0 auto}
+h2{font-size:18px;margin:22px 0 10px;padding-left:10px;border-left:6px solid var(--navy)}
+/* 구역 타일 */
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.tile{border:2px solid var(--line);border-left:10px solid var(--gray);border-radius:6px;padding:10px 12px;cursor:pointer;background:#fff;text-align:center}
+.tile:hover{background:#f7f9fb}
+.tile.ok{border-left-color:var(--ok)} .tile.warn{border-left-color:#e0a100;background:#fffbea} .tile.ng{border-left-color:var(--ng);background:#fff4f4}
+.tile .zn{font-size:19px;font-weight:800;color:var(--navy)}
+.tile .vals{display:flex;justify-content:center;gap:16px;margin:8px 0 4px}
+.tile .v{font-size:32px;font-weight:800;line-height:1.1}
+.tile .v small{font-size:15px;font-weight:700;margin-left:2px}
+.tile .v.warn{color:var(--warn)} .tile .v.ng{color:var(--ng)}
+.tile .lab{font-size:12px;color:#444;font-weight:700}
+.tile .meta{font-size:13px;color:#333;margin-top:4px}
+.tile .spark{margin-top:6px}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:800;border:1.5px solid}
+.badge.ok{color:var(--ok);border-color:var(--ok);background:var(--okbg)}
+.badge.warn{color:var(--warn);border-color:#e0a100;background:var(--warnbg)}
+.badge.ng{color:var(--ng);border-color:var(--ng);background:var(--ngbg)}
+.badge.none{color:#555;border-color:#999;background:#f1f1f1}
+.badge.late{color:#fff;border-color:var(--ng);background:var(--ng)}
+/* 표 */
+.tw{overflow-x:auto;border:2px solid var(--line)}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+table.t th,table.t td{border:1.5px solid var(--line);padding:5px 6px;text-align:center;font-weight:700;white-space:nowrap}
+table.t thead th{background:var(--navy);color:#fff}
+table.t tbody tr:nth-child(even) td{background:#f4f6f9}
+table.t td.warn,table.t tbody tr:nth-child(even) td.warn{background:var(--warnbg);color:var(--warn)}
+table.t td.ng,table.t tbody tr:nth-child(even) td.ng{background:var(--ngbg);color:var(--ng)}
+table.t th.rowh{background:#dde5ee;color:var(--ink)}
+table.t .sun{color:#ff8a8a} table.t .sat{color:#9cc7ff}
+table.sheet{font-size:12px}
+table.sheet th,table.sheet td{padding:4px 2px;min-width:30px}
+table.sheet thead th.day{cursor:pointer}
+table.sheet thead th.day:hover{background:var(--navy2)}
+/* 상세 */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.ztabs{display:flex;flex-wrap:wrap;gap:6px}
+.ztabs button.on{background:var(--navy);color:#fff}
+.mnav{display:flex;align-items:center;gap:6px;margin-left:auto}
+.mnav b{font-size:18px;min-width:120px;text-align:center}
+.kpis{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+.kpi{border:2px solid var(--line);border-radius:4px;padding:5px 12px;font-size:13px;font-weight:700;text-align:center}
+.kpi b{display:block;font-size:19px;color:var(--navy)}
+.kpi.bad b{color:var(--ng)}
+.chartbox{border:2px solid var(--line);border-radius:4px;padding:6px 8px 2px;margin-top:10px}
+.chartbox .ct{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-weight:800;font-size:15px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;font-weight:700;color:#333}
+.legend i{display:inline-block;width:18px;height:0;border-top:3px solid;vertical-align:middle;margin-right:4px}
+.legend i.band{height:10px;border:1px solid #7cbf8c;background:#dff1e3}
+.legend i.dash{border-top:2px dashed}
+svg.chart{width:100%;height:auto;display:block}
+svg .hit{fill:transparent;cursor:pointer}
+svg .hit:hover{fill:rgba(24,59,99,.08)}
+.hint{font-size:13px;color:#444;margin:4px 0}
+.empty{border:3px dashed var(--line);border-radius:6px;padding:26px;text-align:center;font-size:16px;font-weight:700;color:#333;margin:12px 0}
+/* 모달 */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;z-index:50;padding:30px 10px;overflow:auto}
+.card{background:#fff;border-radius:6px;border:2px solid var(--navy);width:100%;max-width:980px;padding:16px 18px}
+.card h3{margin:0 0 10px;font-size:18px;color:var(--navy)}
+.card .row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:6px 0}
+.card label{font-weight:700;font-size:14px}
+.card input[type=number],.card input[type=time],.card select{font:inherit;font-weight:700;padding:4px 6px;border:2px solid var(--line);border-radius:4px;width:90px;text-align:center}
+.card input[type=time]{width:120px}
+.card .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.card fieldset{border:2px solid var(--line);border-radius:4px;margin:10px 0;padding:8px 12px}
+.card legend{font-weight:800;color:var(--navy);padding:0 6px}
+.zbtns{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+#drop{position:fixed;inset:0;background:rgba(24,59,99,.85);color:#fff;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:800;z-index:60}
+#drop.on{display:flex}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:5px;font-weight:700;font-size:14px;display:none;z-index:70;max-width:90vw}
+#toast.ng{background:var(--ng)}
+#print-root{display:none}
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:700px){.tiles{grid-template-columns:repeat(2,1fr)} .tile .v{font-size:26px} .mnav{margin-left:0}}
+@media (max-width:440px){.tiles{grid-template-columns:1fr}}
+/* 인쇄 */
+@media print{
+  @page{size:A4 landscape;margin:7mm}
+  body>*:not(#print-root){display:none!important}
+  #print-root{display:block}
+  .page{page-break-after:always;break-after:page}
+  .page:last-child{page-break-after:auto;break-after:auto}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+.page{font-size:11px;color:#000}
+.page .ph{display:flex;align-items:stretch;border:2px solid #000;margin-bottom:5px}
+.page .ph .ttl{flex:1;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;border-right:2px solid #000}
+.page .ph .ym{width:120px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;border-right:2px solid #000}
+.page table.sign{border-collapse:collapse}
+.page table.sign th,.page table.sign td{border:1px solid #000;width:62px;text-align:center;font-size:11px}
+.page table.sign td{height:40px}
+.page .pstd{font-weight:800;font-size:11px;margin:3px 0}
+.page .pc{border:1.5px solid #000;padding:2px 4px;margin-bottom:4px}
+.page .pc .ct{font-weight:800;font-size:12px}
+.page table.t{font-size:10px}
+.page table.t th,.page table.t td{padding:2px 1px;border:1px solid #000;min-width:0}
+.page table.t thead th{background:#dfe6ee;color:#000}
+.page table.t .sun{color:#c62828} .page table.t .sat{color:#1f4e8c}
+.page .note{font-size:10px;margin-top:4px;line-height:1.5}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b>온·습도 관리</b><span>품질팀 관리구역 5곳</span></div>
+  <div class="basis">최종 기준 시간<b id="lastTs">-</b></div>
+  <div class="clock" id="clock"></div>
+  <div class="sync" id="sync"></div>
+  <div class="acts">
+    <button class="pri" id="btnUpload">CSV 업로드</button>
+    <button id="btnSet">설정</button>
+  </div>
+  <input type="file" id="file" multiple hidden>
+</header>
+<div class="std" id="stdStrip"></div>
+<main id="app"></main>
+<div id="drop">CSV 파일을 여기에 놓으세요</div>
+<div id="toast"></div>
+<div id="print-root"></div>
+
+<script>
+'use strict';
+/* ===== 구역 / 기본 설정 ===== */
+const ZONES=[
+  {id:'incoming',name:'수입검사',room:'수입검사실',kw:['수입'],color:'#1f4e8c'},
+  {id:'process', name:'공정검사',room:'공정검사실',kw:['공정'],color:'#00897b'},
+  {id:'clean',   name:'크린룸',  room:'크린룸',kw:['크린','클린','clean'],color:'#8e24aa'},
+  {id:'pack',    name:'포장실',  room:'포장실',kw:['포장'],color:'#6d4c41'},
+  {id:'store',   name:'완제품 보관',room:'완제품 보관장소',kw:['완제품','보관'],color:'#e65100'}
+];
+const DEF={
+  tMin:15,tMax:25,tLimMin:15,tLimMax:25,   // 온도 관리기준 / 사용범위
+  hMin:20,hMax:60,hLimMin:15,hLimMax:65,   // 습도 관리기준 / 사용범위
+  am:['08:00','09:00'], pm:['13:00','14:00'],
+  stale:3, sensorMap:{}
+};
+let S=JSON.parse(JSON.stringify(DEF));
+let R={};      // key "zone|YYYY-MM-DD HH:MM" -> {z,d,hm,t,h}
+let IDX={};    // zone -> date -> [rec sorted]
+const V={name:'dash',zone:'incoming',ym:null};
+/* ===== 서버(GAS) 연결 =====
+   QMS에 올릴 때 GAS 웹앱 URL을 넣으면 모든 PC가 같은 데이터를 봅니다.
+   비워두면 이 PC 브라우저에만 저장하는 단독 모드로 동작합니다. */
+const TH_API_DEFAULT='';
+let API='',ZL={},SVER='',lastSync=0,syncErr='',lastInput=Date.now();
+const monthLoaded={};
+const WK=['일','월','화','수','목','금','토'];
+
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,'0');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const zoneOf=id=>ZONES.find(z=>z.id===id);
+const f1=v=>v==null||isNaN(v)?'-':(Math.round(v*10)/10).toFixed(1);
+const f0=v=>v==null||isNaN(v)?'-':String(Math.round(v));
+function toMs(s){const m=s.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);return m?new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5]).getTime():0;}
+function daysIn(ym){const [y,m]=ym.split('-').map(Number);return new Date(y,m,0).getDate();}
+function wd(d){const [y,m,dd]=d.split('-').map(Number);return new Date(y,m-1,dd).getDay();}
+function ymShift(ym,k){let [y,m]=ym.split('-').map(Number);m+=k;while(m<1){m+=12;y--;}while(m>12){m-=12;y++;}return y+'-'+pad(m);}
+function todayStr(){const n=new Date();return n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());}
+
+function toast(msg,cls){const t=$('#toast');t.textContent=msg;t.className=cls||'';t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',cls==='ng'?7000:4500);}
+
+/* ===== IndexedDB ===== */
+function idbOpen(){return new Promise((res,rej)=>{const q=indexedDB.open('ntl_temp_humid',1);q.onupgradeneeded=()=>q.result.createObjectStore('kv');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+async function idbGet(k){try{const db=await idbOpen();return await new Promise(res=>{const r=db.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>res(undefined);});}catch(e){return undefined;}}
+async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error);});return true;}catch(e){toast('저장 실패: '+e.message,'ng');return false;}}
+const saveRecords=()=>idbSet('records',Object.values(R));
+async function saveSettings(){await idbSet('settings',S);
+  if(API){try{await apiPost({action:'th_settings_save',settings:S});}catch(e){toast('설정을 서버에 저장하지 못했습니다: '+e.message,'ng');}}}
+
+/* ===== 판정 ===== */
+function lim(kind){return kind==='t'?{mn:S.tMin,mx:S.tMax,lmn:S.tLimMin,lmx:S.tLimMax}:{mn:S.hMin,mx:S.hMax,lmn:S.hLimMin,lmx:S.hLimMax};}
+function st(v,kind){if(v==null||isNaN(v))return '';const L=lim(kind);if(v<L.lmn||v>L.lmx)return 'ng';if(v<L.mn||v>L.mx)return 'warn';return 'ok';}
+const worse=(a,b)=>{const o={'':0,ok:1,warn:2,ng:3};return o[a]>=o[b]?a:b;};
+const ST_TXT={ok:'적합',warn:'관리기준 이탈',ng:'사용범위 이탈'};
+function stdText(kind){const L=lim(kind),u=kind==='t'?'℃':'%',c=(L.mn+L.mx)/2,w=(L.mx-L.mn)/2;
+  const base=`${c}${u} ±${w} (${L.mn}~${L.mx}${u})`;
+  return (L.lmn!==L.mn||L.lmx!==L.mx)?`${base}, 사용범위 ${L.lmn}~${L.lmx}${u}`:base;}
+
+/* ===== 파일명 / CSV 해석 ===== */
+function decodeName(n){let s=n;
+  if((s.match(/_[0-9A-F]{2}/g)||[]).length>=3){ // 메일 첨부명(Q-인코딩)이 깨져 저장된 경우 복원
+    try{s=decodeURIComponent(s.replace(/%/g,'%25').replace(/_([0-9A-F]{2})/g,'%$1'));}catch(e){}
+  }return s;}
+function sensorKey(name){return name.replace(/\.csv_?$/i,'').replace(/\d{6,8}/g,'').replace(/[_\s]+$/,'');}
+function detectZone(name){const k=sensorKey(name);if(S.sensorMap[k])return S.sensorMap[k];
+  const low=name.toLowerCase();for(const z of ZONES){if(z.kw.some(w=>low.includes(w.toLowerCase())))return z.id;}return null;}
+function parseDate(s){let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return `${m[3]}-${pad(m[1])}-${pad(m[2])}`;
+  m=s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;return null;}
+function parseTime(s){const m=s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|오전|오후)?$/i);if(!m)return null;
+  let H=+m[1];const ap=(m[3]||'').toUpperCase();
+  if(ap==='PM'||ap==='오후'){if(H<12)H+=12;}else if(ap==='AM'||ap==='오전'){if(H===12)H=0;}
+  if(H>23||+m[2]>59)return null;return pad(H)+':'+m[2];}
+function parseCsv(txt){txt=txt.replace(/\uFEFF/g,'');let interval='',bad=0;const rows=[];
+  for(const raw of txt.split(/\r?\n/)){const l=raw.trim();if(!l)continue;
+    const f=l.match(/frequency every\s*(.+)$/i);if(f){interval=f[1];continue;}
+    const p=l.split(',').map(x=>x.trim().replace(/^"|"$/g,''));if(p.length<4||/^date$/i.test(p[0]))continue;
+    const d=parseDate(p[0]),hm=parseTime(p[1]),t=parseFloat(p[2]),h=parseFloat(p[3]);
+    if(!d||!hm||isNaN(t)||isNaN(h)){bad++;continue;}rows.push({d,hm,t,h});}
+  return {interval,rows,bad};}
+
+/* ===== 데이터 인덱스 ===== */
+function rebuild(){IDX={};for(const r of Object.values(R)){((IDX[r.z]=IDX[r.z]||{})[r.d]=IDX[r.z][r.d]||[]).push(r);}
+  for(const z in IDX)for(const d in IDX[z])IDX[z][d].sort((a,b)=>a.hm<b.hm?-1:1);}
+function addRows(z,rows){let add=0,upd=0;for(const r of rows){const k=z+'|'+r.d+' '+r.hm,o=R[k];
+  if(!o){R[k]={z,d:r.d,hm:r.hm,t:r.t,h:r.h};add++;}else if(o.t!==r.t||o.h!==r.h){o.t=r.t;o.h=r.h;upd++;}}return {add,upd};}
+function zoneLatest(z){let best=null;const days=Object.keys(IDX[z]||{}).sort();if(days.length){const a=IDX[z][days[days.length-1]];best=a[a.length-1];}
+  const s=ZL[z];if(s&&(!best||s.d+' '+s.hm>best.d+' '+best.hm))best=s;return best;}
+function globalLatest(){let best=null;for(const z of ZONES){const r=zoneLatest(z.id);if(r&&(!best||r.d+' '+r.hm>best.d+' '+best.hm))best=r;}return best;}
+function daySum(z,d){const a=(IDX[z]||{})[d];if(!a||!a.length)return null;
+  const pick=w=>a.find(r=>r.hm>=w[0]&&r.hm<=w[1])||null;
+  const ts=a.map(r=>r.t),hs=a.map(r=>r.h);
+  let devT=0,devH=0,worst='';for(const r of a){const s1=st(r.t,'t'),s2=st(r.h,'h');if(s1!=='ok')devT++;if(s2!=='ok')devH++;worst=worse(worst,worse(s1,s2));}
+  return {n:a.length,recs:a,am:pick(S.am),pm:pick(S.pm),tMax:Math.max(...ts),tMin:Math.min(...ts),hMax:Math.max(...hs),hMin:Math.min(...hs),devT,devH,worst,last:a[a.length-1]};}
+
+/* ===== 업로드 ===== */
+async function readText(f){const buf=await f.arrayBuffer();let t=new TextDecoder('utf-8').decode(buf);
+  if(t.includes('\uFFFD')){try{t=new TextDecoder('euc-kr').decode(buf);}catch(e){}}return t;}
+async function importFiles(files){if(!files||!files.length)return;const out=[],batch=[];let changed=false;
+  for(const f of files){const name=decodeName(f.name);let pr;
+    try{pr=parseCsv(await readText(f));}catch(e){out.push(`${name}: 읽기 실패`);continue;}
+    if(!pr.rows.length){out.push(`${name}: 측정 데이터 없음`);continue;}
+    let z=detectZone(name);if(!z)z=await askZone(name,pr);if(!z){out.push(`${name}: 건너뜀`);continue;}
+    if(API){pr.rows.forEach(r=>batch.push({z,d:r.d,hm:r.hm,t:r.t,h:r.h}));out.push(`${zoneOf(z).name} ${pr.rows.length}건`+(pr.bad?`, 오류행 ${pr.bad}건`:''));continue;}
+    const r=addRows(z,pr.rows);if(r.add||r.upd)changed=true;
+    out.push(`${zoneOf(z).name} ${pr.rows.length}건 중 신규 ${r.add}건`+(r.upd?`, 수정 ${r.upd}건`:'')+(pr.bad?`, 오류행 ${pr.bad}건`:''));}
+  if(API&&batch.length){toast('서버에 저장 중...');
+    try{const res=await apiPost({action:'th_upload',rows:batch});batch.forEach(r=>addRows(r.z,[r]));changed=true;
+      out.push(`서버 저장: 신규 ${res.add}건`+(res.upd?`, 수정 ${res.upd}건`:''));await refreshRecent();}
+    catch(e){render();return toast('서버 저장 실패: '+e.message+' (데이터는 저장되지 않았습니다)','ng');}}
+  if(changed){rebuild();await saveRecords();}
+  render();toast(out.join('  /  '));}
+function askZone(name,pr){return new Promise(res=>{
+  const first=pr.rows[0],last=pr.rows[pr.rows.length-1];
+  const d=document.createElement('div');d.className='ov';
+  d.innerHTML=`<div class="card" style="max-width:560px"><h3>구역을 선택하세요</h3>
+    <div class="hint">파일 이름으로 구역을 알 수 없습니다.<br><b>${esc(name)}</b><br>${first.d} ${first.hm} ~ ${last.d} ${last.hm}, ${pr.rows.length}건</div>
+    <div class="zbtns">${ZONES.map(z=>`<button data-z="${z.id}">${z.name}</button>`).join('')}</div>
+    <label><input type="checkbox" id="rem" checked> 이 센서 파일은 다음부터 같은 구역으로 처리</label>
+    <div class="foot"><button data-z="">건너뛰기</button></div></div>`;
+  d.addEventListener('click',async e=>{const b=e.target.closest('button[data-z]');if(!b)return;const z=b.dataset.z||null;
+    if(z&&d.querySelector('#rem').checked){S.sensorMap[sensorKey(name)]=z;await saveSettings();}d.remove();res(z);});
+  document.body.appendChild(d);});}
+
+/* ===== 차트 (SVG) ===== */
+function yRange(kind,vals){const L=lim(kind);let lo=Math.min(L.lmn,...vals),hi=Math.max(L.lmx,...vals);
+  const step=kind==='t'?5:10;lo=Math.floor((lo-2)/step)*step;hi=Math.ceil((hi+2)/step)*step;if(kind==='h'){lo=Math.max(0,lo);hi=Math.min(100,hi);}return {lo,hi,step};}
+function frame(kind,W,H,P,yr){const L=lim(kind),y=v=>P.t+(yr.hi-v)/(yr.hi-yr.lo)*(H-P.t-P.b);let s='';
+  s+=`<rect x="${P.l}" y="${y(L.mx)}" width="${W-P.l-P.r}" height="${y(L.mn)-y(L.mx)}" fill="#dff1e3"/>`;
+  for(let v=yr.lo;v<=yr.hi;v+=yr.step){s+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#c9d1da" stroke-width="1"/><text x="${P.l-6}" y="${y(v)+4}" text-anchor="end" font-size="12" font-weight="700" fill="#333">${v}</text>`;}
+  const hl=(v,c,dash,tx)=>`<line x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="2" ${dash?'stroke-dasharray="7 5"':''}/><text x="${dash?W-P.r-4:P.l+6}" y="${y(v)-4}" text-anchor="${dash?'end':'start'}" font-size="11" font-weight="800" fill="${c}">${tx}</text>`;
+  if(L.lmn!==L.mn)s+=hl(L.mn,'#2e7d32',false,'관리 '+L.mn);if(L.lmx!==L.mx)s+=hl(L.mx,'#2e7d32',false,'관리 '+L.mx);
+  s+=hl(L.lmx,'#c62828',true,(L.lmx!==L.mx?'사용한계 ':'기준 ')+L.lmx);s+=hl(L.lmn,'#c62828',true,(L.lmn!==L.mn?'사용한계 ':'기준 ')+L.lmn);
+  s+=`<rect x="${P.l}" y="${P.t}" width="${W-P.l-P.r}" height="${H-P.t-P.b}" fill="none" stroke="#56677a" stroke-width="1.5"/>`;
+  return {s,y};}
+function dot(x,y,v,kind,color,shape){const s=st(v,kind);const fill=s==='ng'?'#d32f2f':s==='warn'?'#f2b705':color;const r=s==='ok'?4:6;
+  return shape==='sq'?`<rect x="${x-r}" y="${y-r}" width="${r*2}" height="${r*2}" fill="${fill}" stroke="#fff" stroke-width="1.2"/>`
+    :`<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="1.2"/>`;}
+function path(pts){let d='',on=false;for(const p of pts){if(!p){on=false;continue;}d+=(on?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)+' ';on=true;}return d;}
+
+/* 월간(일별) 차트: 오전·오후 값 + 일 최고~최저 막대 */
+function monthChart(z,ym,kind,opt){opt=opt||{};const N=daysIn(ym),W=opt.w||1000,H=opt.h||250,P={l:40,r:10,t:12,b:26};
+  const sums=[];const vals=[];for(let i=1;i<=N;i++){const s=daySum(z,ym+'-'+pad(i));sums.push(s);if(s)vals.push(kind==='t'?s.tMin:s.hMin,kind==='t'?s.tMax:s.hMax);}
+  const yr=yRange(kind,vals.length?vals:[lim(kind).mn]);const F=frame(kind,W,H,P,yr),y=F.y;const cw=(W-P.l-P.r)/N,x=i=>P.l+(i-0.5)*cw;
+  let s=F.s;const am=[],pm=[];let dots='';
+  sums.forEach((d,k)=>{const i=k+1,X=x(i),w=wd(ym+'-'+pad(i));
+    s+=`<text x="${X}" y="${H-8}" text-anchor="middle" font-size="11" font-weight="700" fill="${w===0?'#c62828':w===6?'#1f4e8c':'#333'}">${i}</text>`;
+    if(!d){am.push(null);pm.push(null);return;}
+    const mn=kind==='t'?d.tMin:d.hMin,mx=kind==='t'?d.tMax:d.hMax;
+    s+=`<rect x="${X-cw*0.18}" y="${y(mx)}" width="${cw*0.36}" height="${Math.max(2,y(mn)-y(mx))}" fill="#b8c4d1" opacity=".75"/>`;
+    const a=d.am?(kind==='t'?d.am.t:d.am.h):null,p=d.pm?(kind==='t'?d.pm.t:d.pm.h):null;
+    am.push(a!=null?[X,y(a)]:null);pm.push(p!=null?[X,y(p)]:null);
+    if(a!=null)dots+=dot(X,y(a),a,kind,'#183b63','c');if(p!=null)dots+=dot(X,y(p),p,kind,'#e65100','sq');});
+  s+=`<path d="${path(am)}" fill="none" stroke="#183b63" stroke-width="2.2"/><path d="${path(pm)}" fill="none" stroke="#e65100" stroke-width="2.2"/>`+dots;
+  if(!opt.print)for(let i=1;i<=N;i++)s+=`<rect class="hit" data-d="${ym}-${pad(i)}" x="${x(i)-cw/2}" y="${P.t}" width="${cw}" height="${H-P.t-P.b}"><title>${i}일 시간별 보기</title></rect>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${zoneOf(z).name} ${kind==='t'?'온도':'습도'} 월간 추이">${s}</svg>`;}
+
+/* 하루(시간별) 차트: series = [{recs,color,name}] */
+function dayChart(series,kind,opt){opt=opt||{};const W=opt.w||1000,H=opt.h||240,P={l:40,r:10,t:12,b:26};
+  const vals=[];series.forEach(se=>se.recs.forEach(r=>vals.push(kind==='t'?r.t:r.h)));
+  const yr=yRange(kind,vals.length?vals:[lim(kind).mn]);const F=frame(kind,W,H,P,yr),y=F.y;
+  const x=hm=>{const [h,m]=hm.split(':').map(Number);return P.l+(h+m/60)/24*(W-P.l-P.r);};let s=F.s;
+  for(let h=0;h<=24;h+=2)s+=`<text x="${P.l+h/24*(W-P.l-P.r)}" y="${H-8}" text-anchor="middle" font-size="11" font-weight="700" fill="#333">${h}시</text>`;
+  const band=(w,c)=>{const [a,b]=[x(w[0]),x(w[1])];return `<rect x="${a}" y="${P.t}" width="${Math.max(2,b-a)}" height="${H-P.t-P.b}" fill="${c}" opacity=".13"/>`;};
+  s+=band(S.am,'#183b63')+band(S.pm,'#e65100');
+  series.forEach(se=>{const pts=[];let prev=null,ds='';
+    se.recs.forEach(r=>{const v=kind==='t'?r.t:r.h,X=x(r.hm),Y=y(v);
+      if(prev&&toMs(r.d+' '+r.hm)-toMs(prev.d+' '+prev.hm)>2.5*3600e3)pts.push(null);pts.push([X,Y]);prev=r;
+      if(st(v,kind)!=='ok'||se.recs.length<=30)ds+=dot(X,Y,v,kind,se.color,'c');});
+    s+=`<path d="${path(pts)}" fill="none" stroke="${se.color}" stroke-width="2.4"/>`+ds;});
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${kind==='t'?'온도':'습도'} 시간별 추이">${s}</svg>`;}
+
+function spark(recs){if(!recs||recs.length<2)return '';const W=200,H=34;const mk=(k,c)=>{const v=recs.map(r=>k==='t'?r.t:r.h);const lo=Math.min(...v),hi=Math.max(...v),sp=hi-lo||1;
+  return `<polyline fill="none" stroke="${c}" stroke-width="2" points="${recs.map((r,i)=>`${(i/(recs.length-1)*W).toFixed(1)},${(H-3-(v[i]-lo)/sp*(H-6)).toFixed(1)}`).join(' ')}"/>`;};
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-hidden="true">${mk('t','#183b63')}${mk('h','#00897b')}</svg>`;}
+
+/* ===== 공통 화면 조각 ===== */
+function renderHeader(){const g=globalLatest();$('#lastTs').textContent=g?`${g.d} ${g.hm}`:'-';
+  const n=new Date();$('#clock').textContent=`현재 ${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  const sy=$('#sync');if(!API){sy.textContent='이 PC 저장 모드';sy.className='sync';}
+  else if(syncErr){sy.textContent='서버 연결 실패';sy.title=syncErr;sy.className='sync err';}
+  else{const t=lastSync?new Date(lastSync):null;sy.textContent='서버 연결'+(t?` ${pad(t.getHours())}:${pad(t.getMinutes())} 갱신`:'');sy.title='';sy.className='sync';}
+  $('#stdStrip').innerHTML=`<span>온도 <em>${stdText('t')}</em></span><span>습도 <em>${stdText('h')}</em></span><span>체크 시각 <em>오전 ${S.am[0]}~${S.am[1]} / 오후 ${S.pm[0]}~${S.pm[1]}</em></span>`;}
+const vc=(v,kind,fmt)=>`<td class="${st(v,kind)==='ok'?'':st(v,kind)}">${v==null?'-':fmt(v)}</td>`;
+
+function todayTable(day){let h=`<table class="t"><thead><tr><th rowspan="2">구역</th><th rowspan="2">최종 측정</th><th colspan="2">현재</th><th colspan="2">오전</th><th colspan="2">오후</th><th colspan="2">온도(℃)</th><th colspan="2">습도(%)</th><th rowspan="2">이탈<br>건수</th><th rowspan="2">상태</th></tr>
+  <tr><th>온도</th><th>습도</th><th>온도</th><th>습도</th><th>온도</th><th>습도</th><th>최고</th><th>최저</th><th>최고</th><th>최저</th></tr></thead><tbody>`;
+  for(const z of ZONES){const s=day?daySum(z.id,day):null;
+    if(!s){h+=`<tr><th class="rowh">${z.name}</th><td colspan="12">당일 데이터 없음</td><td><span class="badge none">미수신</span></td></tr>`;continue;}
+    const L=s.last,dev=s.devT+s.devH;
+    h+=`<tr><th class="rowh">${z.name}</th><td>${L.hm}</td>${vc(L.t,'t',f1)}${vc(L.h,'h',f0)}${vc(s.am&&s.am.t,'t',f1)}${vc(s.am&&s.am.h,'h',f0)}${vc(s.pm&&s.pm.t,'t',f1)}${vc(s.pm&&s.pm.h,'h',f0)}
+      ${vc(s.tMax,'t',f1)}${vc(s.tMin,'t',f1)}${vc(s.hMax,'h',f0)}${vc(s.hMin,'h',f0)}<td class="${dev?'ng':''}">${dev}</td><td><span class="badge ${s.worst}">${ST_TXT[s.worst]}</span></td></tr>`;}
+  return h+'</tbody></table>';}
+
+/* ===== 대시보드 ===== */
+function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
+  let h='';
+  if(g&&now-toMs(g.d+' '+g.hm)>=S.stale*3600e3){const hr=Math.floor((now-toMs(g.d+' '+g.hm))/3600e3);
+    h+=`<div class="alert">최종 데이터가 ${hr}시간 전(${g.d} ${g.hm})입니다. 센서 메일 수신 또는 CSV 업로드 상태를 확인하세요.</div>`;}
+  if(!g)h+=`<div class="empty">TempPro 메일로 받은 CSV 파일을 이 화면에 끌어다 놓거나 [CSV 업로드]를 누르세요.<br><span style="font-weight:400;font-size:14px">파일 이름에 구역명(수입검사·공정검사·크린룸·포장·완제품 보관)이 들어 있으면 자동으로 분류됩니다.</span></div>`;
+  h+=`<div class="bar"><h2 style="margin:6px 0">당일 현황 ${day?`<span style="font-size:15px;color:#444">(${day} ${WK[wd(day)]}요일)</span>`:''}</h2>
+    <div class="mnav"><button id="pDay">당일 현황 출력</button><button id="pAll">5개 구역 월간 체크시트 출력</button></div></div>`;
+  h+='<div class="tiles">';
+  for(const z of ZONES){const s=day?daySum(z.id,day):null,zl=zoneLatest(z.id);
+    const late=zl&&now-toMs(zl.d+' '+zl.hm)>=S.stale*3600e3;
+    if(!s){h+=`<div class="tile" tabindex="0" data-z="${z.id}"><div class="zn">${z.name}</div><div class="vals"><div class="v" style="color:#999">--</div></div>
+      <div class="meta"><span class="badge ${late?'late':'none'}">${late?'수신 지연':'당일 데이터 없음'}</span></div>${zl?`<div class="meta">마지막 ${zl.d} ${zl.hm}</div>`:''}</div>`;continue;}
+    const L=s.last,a=st(L.t,'t'),b=st(L.h,'h'),cur=worse(a,b),dev=s.devT+s.devH;
+    h+=`<div class="tile ${cur}" tabindex="0" data-z="${z.id}" title="${z.name} 일별 추이 보기">
+      <div class="zn">${z.name}</div>
+      <div class="vals"><div><div class="v ${a==='ok'?'':a}">${f1(L.t)}<small>℃</small></div><div class="lab">온도</div></div>
+      <div><div class="v ${b==='ok'?'':b}">${f0(L.h)}<small>%</small></div><div class="lab">습도</div></div></div>
+      <div class="meta"><span class="badge ${cur}">${ST_TXT[cur]}</span> ${L.hm} 측정 ${late?'<span class="badge late">수신 지연</span>':''}</div>
+      <div class="meta">온도 ${f1(s.tMin)}~${f1(s.tMax)} / 습도 ${f0(s.hMin)}~${f0(s.hMax)}</div>
+      <div class="meta" style="color:${dev?'var(--ng)':'#333'};font-weight:700">당일 이탈 ${dev}건</div>
+      <div class="spark">${spark(s.recs)}</div></div>`;}
+  h+='</div>';
+  h+=`<p class="hint">구역을 누르면 일별 추이와 체크시트를 봅니다. 작은 그래프: <b style="color:#183b63">온도</b> / <b style="color:#00897b">습도</b></p>`;
+  h+=`<h2>구역별 당일 요약</h2><div class="tw">${todayTable(day)}</div>`;
+  if(day){const se=ZONES.map(z=>({recs:(IDX[z.id]||{})[day]||[],color:z.color,name:z.name})).filter(x=>x.recs.length);
+    const lg=`<div class="legend">${se.map(x=>`<span><i style="border-color:${x.color}"></i>${x.name}</span>`).join('')}<span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
+    h+=`<h2>당일 시간별 비교</h2><div class="chartbox"><div class="ct">온도(℃) ${lg}</div>${dayChart(se,'t')}</div>
+      <div class="chartbox"><div class="ct">습도(%) ${lg}</div>${dayChart(se,'h')}</div>`;}
+  $('#app').innerHTML=h;
+  $('#app').querySelectorAll('.tile').forEach(t=>{const go=()=>{V.name='detail';V.zone=t.dataset.z;V.ym=null;render();window.scrollTo(0,0);};
+    t.onclick=go;t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};});
+  $('#pDay').onclick=()=>{if(!day)return toast('출력할 데이터가 없습니다','ng');doPrint(printDay(day));};
+  $('#pAll').onclick=async()=>{const ym=(day||todayStr()).slice(0,7);
+    if(API){toast('5개 구역 데이터를 불러오는 중...');try{for(const z of ZONES)await ensureMonth(z.id,ym);}catch(e){return toast('불러오기 실패: '+e.message,'ng');}}
+    doPrint(ZONES.map(z=>printSheet(z.id,ym)).join(''));};}
+
+/* ===== 구역 상세 ===== */
+function monthDev(z,ym){const out=[];const N=daysIn(ym);for(let i=1;i<=N;i++){const a=(IDX[z]||{})[ym+'-'+pad(i)]||[];
+  for(const r of a){const s1=st(r.t,'t'),s2=st(r.h,'h');if(s1!=='ok')out.push({r,k:'온도',v:f1(r.t)+'℃',s:s1});if(s2!=='ok')out.push({r,k:'습도',v:f0(r.h)+'%',s:s2});}}return out;}
+function sheetTable(z,ym,forPrint){const N=daysIn(ym);const sums=[];for(let i=1;i<=N;i++)sums.push(daySum(z,ym+'-'+pad(i)));
+  let h=`<table class="t sheet"><thead><tr><th colspan="2">일</th>`;
+  for(let i=1;i<=N;i++){const w=wd(ym+'-'+pad(i));h+=`<th class="${forPrint?'':'day'} ${w===0?'sun':w===6?'sat':''}" data-d="${ym}-${pad(i)}">${i}</th>`;}
+  h+=`</tr><tr><th colspan="2">요일</th>`;for(let i=1;i<=N;i++){const w=wd(ym+'-'+pad(i));h+=`<th class="${w===0?'sun':w===6?'sat':''}">${WK[w]}</th>`;}h+='</tr></thead><tbody>';
+  const rows=[['온도(오전)','t',s=>s.am&&s.am.t,f1],['습도(오전)','h',s=>s.am&&s.am.h,f0],['온도(오후)','t',s=>s.pm&&s.pm.t,f1],['습도(오후)','h',s=>s.pm&&s.pm.h,f0],
+    ['최고 온도','t',s=>s.tMax,f1],['최저 온도','t',s=>s.tMin,f1],['최고 습도','h',s=>s.hMax,f0],['최저 습도','h',s=>s.hMin,f0]];
+  rows.forEach(([nm,k,g,fm])=>{h+=`<tr><th class="rowh">${nm}</th><th class="rowh" style="font-size:11px">${stdShort(k)}</th>`;
+    for(const s of sums){const v=s?g(s):null;h+=vc(v==null?null:v,k,fm);}h+='</tr>';});
+  return h+'</tbody></table>';}
+function stdShort(k){const L=lim(k),u=k==='t'?'℃':'%';return `${(L.mn+L.mx)/2}${u}±${(L.mx-L.mn)/2}`;}
+
+function renderDetail(){const z=V.zone,zo=zoneOf(z);const zl=zoneLatest(z),g=globalLatest();
+  if(!V.ym)V.ym=(zl?zl.d:g?g.d:todayStr()).slice(0,7);const ym=V.ym,[y,m]=ym.split('-');
+  if(API)ensureMonth(z,ym).then(ch=>{if(ch&&V.name==='detail'&&V.zone===z&&V.ym===ym)renderDetail();}).catch(e=>{syncErr=e.message;renderHeader();});
+  const N=daysIn(ym);let nRec=0,nDay=0,tX=-1e9,tN=1e9,hX=-1e9,hN=1e9;
+  for(let i=1;i<=N;i++){const s=daySum(z,ym+'-'+pad(i));if(!s)continue;nDay++;nRec+=s.n;tX=Math.max(tX,s.tMax);tN=Math.min(tN,s.tMin);hX=Math.max(hX,s.hMax);hN=Math.min(hN,s.hMin);}
+  const dev=monthDev(z,ym);
+  let h=`<div class="bar"><button id="back">← 당일 현황</button><div class="ztabs">${ZONES.map(x=>`<button data-z="${x.id}" class="${x.id===z?'on':''}">${x.name}</button>`).join('')}</div>
+    <div class="mnav"><button id="mPrev" aria-label="이전 달">◀</button><b>${y}년 ${+m}월</b><button id="mNext" aria-label="다음 달">▶</button><button id="pSheet" class="pri">출력</button><button id="xls">엑셀</button></div></div>`;
+  h+=`<div class="kpis"><div class="kpi">측정일<b>${nDay} / ${N}일</b></div><div class="kpi">측정 건수<b>${nRec}</b></div>
+    <div class="kpi">온도 범위<b>${nDay?f1(tN)+' ~ '+f1(tX):'-'}</b></div><div class="kpi">습도 범위<b>${nDay?f0(hN)+' ~ '+f0(hX):'-'}</b></div>
+    <div class="kpi ${dev.length?'bad':''}">이탈<b>${dev.length}건</b></div></div>`;
+  if(!nDay)h+=`<div class="empty">${zo.name}의 ${y}년 ${+m}월 데이터가 없습니다.</div>`;
+  const lg=`<div class="legend"><span><i style="border-color:#183b63"></i>오전</span><span><i style="border-color:#e65100"></i>오후</span><span><i style="border-color:#b8c4d1;border-top-width:8px"></i>일 최고~최저</span><span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
+  h+=`<div class="chartbox"><div class="ct">${zo.room} 온도(℃) <span style="font-size:13px">${stdText('t')}</span> ${lg}</div>${monthChart(z,ym,'t')}</div>`;
+  h+=`<div class="chartbox"><div class="ct">${zo.room} 습도(%) <span style="font-size:13px">${stdText('h')}</span> ${lg}</div>${monthChart(z,ym,'h')}</div>`;
+  h+=`<p class="hint">그래프의 날짜나 표의 날짜를 누르면 그날의 시간별 기록을 봅니다.</p>`;
+  h+=`<h2>체크시트</h2><div class="tw">${sheetTable(z,ym)}</div>`;
+  h+=`<h2>이탈 이력 (${dev.length}건)</h2>`;
+  h+=dev.length?`<div class="tw"><table class="t"><thead><tr><th>일시</th><th>항목</th><th>측정값</th><th>구분</th><th>기준</th></tr></thead><tbody>${dev.map(e=>`<tr><td>${e.r.d} ${e.r.hm}</td><td>${e.k}</td><td class="${e.s}">${e.v}</td><td><span class="badge ${e.s}">${ST_TXT[e.s]}</span></td><td>${stdText(e.k==='온도'?'t':'h')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">이탈 없음</p>';
+  $('#app').innerHTML=h;
+  $('#back').onclick=()=>{V.name='dash';render();};
+  $('#app').querySelectorAll('.ztabs button').forEach(b=>b.onclick=()=>{V.zone=b.dataset.z;render();});
+  $('#mPrev').onclick=()=>{V.ym=ymShift(ym,-1);render();};$('#mNext').onclick=()=>{V.ym=ymShift(ym,1);render();};
+  $('#pSheet').onclick=()=>doPrint(printSheet(z,ym));$('#xls').onclick=()=>exportXlsx(z,ym);
+  $('#app').querySelectorAll('[data-d]').forEach(el=>el.addEventListener('click',()=>openDay(z,el.dataset.d)));}
+
+function openDay(z,d){const a=(IDX[z]||{})[d]||[];const zo=zoneOf(z);
+  const o=document.createElement('div');o.className='ov';
+  const se=[{recs:a,color:'#183b63'}],seH=[{recs:a,color:'#00897b'}];
+  o.innerHTML=`<div class="card"><h3>${zo.name} ${d} (${WK[wd(d)]}) 시간별 기록</h3>
+    ${a.length?`<div class="chartbox"><div class="ct">온도(℃)</div>${dayChart(se,'t',{h:210})}</div><div class="chartbox"><div class="ct">습도(%)</div>${dayChart(seH,'h',{h:210})}</div>
+    <div class="tw" style="margin-top:10px;max-height:300px;overflow:auto"><table class="t"><thead><tr><th>시각</th><th>온도(℃)</th><th>습도(%)</th><th>판정</th></tr></thead><tbody>
+    ${a.map(r=>{const w=worse(st(r.t,'t'),st(r.h,'h'));return `<tr><td>${r.hm}</td>${vc(r.t,'t',f1)}${vc(r.h,'h',f0)}<td><span class="badge ${w}">${ST_TXT[w]}</span></td></tr>`;}).join('')}</tbody></table></div>`
+    :'<div class="empty">이 날의 기록이 없습니다.</div>'}
+    <div class="foot"><button class="pri" data-x>닫기</button></div></div>`;
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]'))o.remove();});
+  document.body.appendChild(o);o.querySelector('[data-x]').focus();}
+
+/* ===== 출력 ===== */
+function signBox(){return `<table class="sign"><tr><th>담당</th><th>검토</th><th>승인</th></tr><tr><td></td><td></td><td></td></tr></table>`;}
+function printSheet(z,ym){const zo=zoneOf(z),[y,m]=ym.split('-');const dev=monthDev(z,ym);
+  const lgp=`<span style="font-weight:700;font-size:10px;margin-left:10px"><span style="color:#183b63">● 오전</span>  <span style="color:#e65100">■ 오후</span>  <span style="color:#7b8794">▮ 일 최고~최저</span>  <span style="color:#2e7d32">▭ 관리기준</span>  <span style="color:#c62828">- - 한계</span></span>`;
+  let h=`<div class="page"><div class="ph"><div class="ttl">품질관리 온/습도 CHECK SHEET(${zo.room})</div><div class="ym">${y}년 ${+m}월</div>${signBox()}</div>
+    <div class="pstd">온도 ${stdText('t')}   |   습도 ${stdText('h')}   |   오전 ${S.am[0]}~${S.am[1]}, 오후 ${S.pm[0]}~${S.pm[1]} (구간 내 첫 측정값)</div>
+    <div class="pc"><div class="ct">온도(℃)${lgp}</div>${monthChart(z,ym,'t',{print:1,h:165})}</div>
+    <div class="pc"><div class="ct">습도(%)${lgp}</div>${monthChart(z,ym,'h',{print:1,h:165})}</div>
+    ${sheetTable(z,ym,true)}
+    <div class="note">※ 온/습도 관리기준 초과 시 담당자 및 관리자 통보 바람. 노란 칸 = 관리기준 이탈, 빨간 칸 = 사용범위(한계) 이탈.<br>
+    ※ 센서(TempPro) 자동 기록 데이터 기준. 월간 이탈 ${dev.length}건${dev.length?': '+dev.slice(0,8).map(e=>`${e.r.d.slice(5)} ${e.r.hm} ${e.k} ${e.v}`).join(', ')+(dev.length>8?` 외 ${dev.length-8}건`:''):''}</div></div>`;
+  return h;}
+function printDay(day){const se=ZONES.map(z=>({recs:(IDX[z.id]||{})[day]||[],color:z.color,name:z.name})).filter(x=>x.recs.length);
+  const lg=se.map(x=>`<span style="color:${x.color};margin-right:10px">━ ${x.name}</span>`).join('');const g=globalLatest();
+  return `<div class="page"><div class="ph"><div class="ttl">품질팀 관리구역 온/습도 당일 현황</div><div class="ym">${day}<br>(${WK[wd(day)]})</div>${signBox()}</div>
+    <div class="pstd">최종 기준 시간 ${g?g.d+' '+g.hm:'-'}   |   온도 ${stdText('t')}   |   습도 ${stdText('h')}</div>
+    ${todayTable(day)}
+    <div class="pc" style="margin-top:6px"><div class="ct">온도(℃) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'t',{h:170})}</div>
+    <div class="pc"><div class="ct">습도(%) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'h',{h:170})}</div></div>`;}
+function doPrint(html){const r=$('#print-root');r.innerHTML=html;setTimeout(()=>window.print(),80);}
+window.addEventListener('afterprint',()=>{$('#print-root').innerHTML='';});
+
+/* ===== 엑셀 ===== */
+function exportXlsx(z,ym){if(typeof XLSX==='undefined')return toast('엑셀 라이브러리를 불러오지 못했습니다(인터넷 연결 확인)','ng');
+  const zo=zoneOf(z),N=daysIn(ym);const hd=['항목','기준'],wdRow=['요일',''];const sums=[];
+  for(let i=1;i<=N;i++){hd.push(i);wdRow.push(WK[wd(ym+'-'+pad(i))]);sums.push(daySum(z,ym+'-'+pad(i)));}
+  const row=(nm,k,g)=>[nm,stdShort(k),...sums.map(s=>{const v=s?g(s):null;return v==null?'':Math.round(v*10)/10;})];
+  const aoa=[[`품질관리 온/습도 CHECK SHEET(${zo.room}) ${ym}`],[`온도 ${stdText('t')} / 습도 ${stdText('h')}`],[],hd,wdRow,
+    row('온도(오전)','t',s=>s.am&&s.am.t),row('습도(오전)','h',s=>s.am&&s.am.h),row('온도(오후)','t',s=>s.pm&&s.pm.t),row('습도(오후)','h',s=>s.pm&&s.pm.h),
+    row('최고 온도','t',s=>s.tMax),row('최저 온도','t',s=>s.tMin),row('최고 습도','h',s=>s.hMax),row('최저 습도','h',s=>s.hMin)];
+  const raw=[['날짜','시각','온도(℃)','습도(%)','온도 판정','습도 판정']];
+  for(let i=1;i<=N;i++)for(const r of (IDX[z]||{})[ym+'-'+pad(i)]||[])raw.push([r.d,r.hm,r.t,r.h,ST_TXT[st(r.t,'t')],ST_TXT[st(r.h,'h')]]);
+  const dev=[['일시','항목','측정값','구분']].concat(monthDev(z,ym).map(e=>[e.r.d+' '+e.r.hm,e.k,e.v,ST_TXT[e.s]]));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'체크시트');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(raw),'시간별');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dev),'이탈이력');
+  XLSX.writeFile(wb,`온습도_${zo.name}_${ym}.xlsx`);}
+
+/* ===== 설정 ===== */
+function openSettings(){const o=document.createElement('div');o.className='ov';
+  const n=(id,v)=>`<input type="number" step="0.5" id="${id}" value="${v}">`;
+  const maps=Object.entries(S.sensorMap);
+  o.innerHTML=`<div class="card" style="max-width:720px"><h3>설정</h3>
+  <fieldset><legend>온도(℃)</legend><div class="row"><label>관리기준</label>${n('tMin',S.tMin)} ~ ${n('tMax',S.tMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('tLimMin',S.tLimMin)} ~ ${n('tLimMax',S.tLimMax)}</div>
+   <div class="hint">측정기 사용 온도범위를 확인하면 사용범위에 입력하세요. 관리기준과 같으면 초과 즉시 빨강(한계 이탈)으로 표시됩니다.</div></fieldset>
+  <fieldset><legend>습도(%)</legend><div class="row"><label>관리기준</label>${n('hMin',S.hMin)} ~ ${n('hMax',S.hMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('hLimMin',S.hLimMin)} ~ ${n('hLimMax',S.hLimMax)}</div></fieldset>
+  <fieldset><legend>체크시트 기록 시각</legend><div class="row"><label>오전</label><input type="time" id="am0" value="${S.am[0]}"> ~ <input type="time" id="am1" value="${S.am[1]}">
+   <label style="margin-left:14px">오후</label><input type="time" id="pm0" value="${S.pm[0]}"> ~ <input type="time" id="pm1" value="${S.pm[1]}"></div>
+   <div class="hint">구간 안의 첫 측정값을 오전/오후 칸에 넣습니다.</div>
+   <div class="row"><label>수신 지연 경고</label><input type="number" id="stale" min="1" step="1" value="${S.stale}"> 시간 이상 새 데이터가 없으면 (현재 시각 기준)</div></fieldset>
+  <fieldset><legend>센서 파일 → 구역 연결</legend>${maps.length?maps.map(([k,v])=>`<div class="row"><span style="font-weight:700">${esc(k)}</span> → <b>${zoneOf(v)?zoneOf(v).name:v}</b> <button data-unmap="${esc(k)}">연결 해제</button></div>`).join(''):'<div class="hint">수동으로 연결한 센서가 없습니다. 파일 이름에 구역명이 있으면 자동 분류됩니다.</div>'}</fieldset>
+  <fieldset><legend>서버 연결 (QMS 공유)</legend><div class="row" style="flex-wrap:nowrap"><input class="url" id="apiUrl" placeholder="GAS 웹앱 URL (비우면 이 PC 저장 모드)" value="${esc(API)}"><button id="apiTest">연결 확인</button></div>
+   <div class="hint">연결하면 데이터와 설정을 모든 PC가 함께 씁니다. 1분마다 자동 갱신됩니다.</div></fieldset>
+  <fieldset><legend>데이터</legend><div class="row"><button id="bk">백업 파일 저장</button><button id="rs">${API?'백업을 서버로 올리기':'백업 불러오기'}</button><input type="file" id="rsf" accept=".json" hidden>
+   ${API?'':`<select id="delZ" style="width:140px">${ZONES.map(z=>`<option value="${z.id}">${z.name}</option>`).join('')}</select><button id="delB" style="border-color:var(--ng);color:var(--ng)">구역 데이터 삭제</button>`}</div>
+   <div class="hint">${API?'서버 모드: 기록 수정·삭제는 구글 시트(온습도_LOG)에서 직접 하고, GAS의 thRebuildLatest를 한 번 실행하세요.':`데이터는 이 PC 브라우저에 저장됩니다. 저장 건수 ${Object.keys(R).length}건.`}</div></fieldset>
+  <div class="foot"><button data-x>취소</button><button class="pri" id="sv">저장</button></div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]'))o.remove();});
+  o.querySelectorAll('[data-unmap]').forEach(b=>b.onclick=async()=>{delete S.sensorMap[b.dataset.unmap];await saveSettings();o.remove();openSettings();});
+  o.querySelector('#sv').onclick=async()=>{const g=id=>parseFloat(o.querySelector('#'+id).value);const nw={tMin:g('tMin'),tMax:g('tMax'),tLimMin:g('tLimMin'),tLimMax:g('tLimMax'),hMin:g('hMin'),hMax:g('hMax'),hLimMin:g('hLimMin'),hLimMax:g('hLimMax')};
+    if(Object.values(nw).some(isNaN))return toast('숫자를 모두 입력하세요','ng');
+    if(nw.tMin>=nw.tMax||nw.hMin>=nw.hMax)return toast('관리기준 하한이 상한보다 작아야 합니다','ng');
+    if(nw.tLimMin>nw.tMin||nw.tLimMax<nw.tMax||nw.hLimMin>nw.hMin||nw.hLimMax<nw.hMax)return toast('사용범위는 관리기준을 포함해야 합니다','ng');
+    Object.assign(S,nw);S.am=[o.querySelector('#am0').value,o.querySelector('#am1').value];S.pm=[o.querySelector('#pm0').value,o.querySelector('#pm1').value];
+    S.stale=Math.max(1,parseInt(o.querySelector('#stale').value)||3);
+    const nu=o.querySelector('#apiUrl').value.trim();
+    if(nu!==API){API=nu;await idbSet('api',nu);ZL={};SVER='';for(const k in monthLoaded)delete monthLoaded[k];
+      if(API){o.remove();await cloudInit();toast('서버에 연결했습니다');return;}}
+    await saveSettings();o.remove();render();toast('설정을 저장했습니다');};
+  o.querySelector('#apiTest').onclick=async()=>{const u=o.querySelector('#apiUrl').value.trim();if(!u)return toast('URL을 입력하세요','ng');
+    try{const r=await fetch(u+(u.includes('?')?'&':'?')+'action=th_settings');const j=await r.json();if(!j.ok)throw new Error(j.error);toast('연결 성공');}
+    catch(e){toast('연결 실패: '+e.message,'ng');}};
+  o.querySelector('#bk').onclick=()=>{const b=new Blob([JSON.stringify({app:'ntl-temp-humid',ver:1,savedAt:new Date().toISOString(),settings:S,records:Object.values(R)})],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`온습도_백업_${todayStr()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);};
+  o.querySelector('#rs').onclick=()=>o.querySelector('#rsf').click();
+  o.querySelector('#rsf').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(j.app!=='ntl-temp-humid')throw new Error('형식이 다른 파일');
+    if(API){const rows=(j.records||[]).map(r=>({z:r.z,d:r.d,hm:r.hm,t:r.t,h:r.h}));let add=0;
+      for(let i=0;i<rows.length;i+=5000){const res=await apiPost({action:'th_upload',src:'복원',rows:rows.slice(i,i+5000)});add+=res.add;}
+      o.remove();await refreshRecent();render();return toast(`백업 ${rows.length}건을 서버로 올렸습니다(신규 ${add}건)`);}
+    let n=0;for(const r of j.records||[]){const k=r.z+'|'+r.d+' '+r.hm;if(!R[k]){R[k]=r;n++;}}
+    if(j.settings&&j.settings.sensorMap)Object.assign(S.sensorMap,j.settings.sensorMap);
+    rebuild();await saveRecords();await saveSettings();o.remove();render();toast(`백업에서 ${n}건을 추가했습니다(기존 기록 유지)`);}catch(err){toast('불러오기 실패: '+err.message,'ng');}};
+  if(!API)o.querySelector('#delB').onclick=async()=>{const z=o.querySelector('#delZ').value,zo=zoneOf(z);const ks=Object.keys(R).filter(k=>k.startsWith(z+'|'));
+    if(!ks.length)return toast(zo.name+' 데이터가 없습니다');
+    if(!confirm(`${zo.name} 기록 ${ks.length}건을 삭제합니다. 되돌릴 수 없습니다. 삭제 전에 백업을 권장합니다.\n계속할까요?`))return;
+    ks.forEach(k=>delete R[k]);rebuild();await saveRecords();o.remove();render();toast(`${zo.name} ${ks.length}건 삭제`);};}
+
+/* ===== 서버 통신 ===== */
+async function apiGet(p){const r=await fetch(API+(API.includes('?')?'&':'?')+new URLSearchParams(p));const j=await r.json();if(!j.ok)throw new Error(j.error||'서버 오류');return j;}
+async function apiPost(b){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(b)});const j=await r.json();if(!j.ok)throw new Error(j.error||'서버 오류');return j;}
+function mergeServer(rows){let ch=0;for(const [z,d,hm,t,h] of rows||[]){const k=z+'|'+d+' '+hm,o=R[k];if(!o||o.t!==t||o.h!==h){R[k]={z,d,hm,t,h};ch++;}}if(ch)rebuild();return ch;}
+async function refreshRecent(){try{const j=await apiGet({action:'th_recent'});ZL={};
+    for(const z in j.zoneLatest||{}){const a=j.zoneLatest[z];ZL[z]={z,d:a[0],hm:a[1],t:a[2],h:a[3]};}
+    const ch=mergeServer(j.rows),vc=j.ver!==SVER;SVER=j.ver;lastSync=Date.now();syncErr='';if(ch)saveRecords();return ch>0||vc;}
+  catch(e){syncErr=e.message;return false;}}
+async function ensureMonth(z,ym){const k=z+ym;if(SVER&&monthLoaded[k]===SVER)return false;
+  const j=await apiGet({action:'th_range',z,from:ym+'-01',to:ym+'-'+pad(daysIn(ym))});monthLoaded[k]=j.ver;const ch=mergeServer(j.rows);if(ch)saveRecords();return ch>0;}
+async function cloudInit(){try{const j=await apiGet({action:'th_settings'});if(j.settings)S=Object.assign(JSON.parse(JSON.stringify(DEF)),j.settings);else await saveSettings();await idbSet('settings',S);}
+  catch(e){syncErr=e.message;}await refreshRecent();render();}
+/* 1분마다: 서버 갱신, 시계·수신지연 갱신, 방치된 상세화면은 5분 후 당일 현황으로 복귀 */
+async function tick(){let ch=false;if(API)ch=await refreshRecent();
+  const idle=Date.now()-lastInput>5*60e3,modal=document.querySelector('.ov');
+  if(V.name==='detail'&&idle&&!modal){V.name='dash';render();return;}
+  if(V.name==='dash'&&!modal)render();else{renderHeader();if(ch&&V.name==='detail'&&!modal)renderDetail();}}
+['pointerdown','keydown','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{lastInput=Date.now();},{passive:true}));
+
+/* ===== 시작 ===== */
+function render(){renderHeader();if(V.name==='detail')renderDetail();else renderDash();}
+$('#btnUpload').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{importFiles([...e.target.files]);e.target.value='';};
+$('#btnSet').onclick=openSettings;
+let dragN=0;
+window.addEventListener('dragenter',e=>{if([...(e.dataTransfer.types||[])].includes('Files')){dragN++;$('#drop').classList.add('on');}});
+window.addEventListener('dragleave',()=>{dragN=Math.max(0,dragN-1);if(!dragN)$('#drop').classList.remove('on');});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{e.preventDefault();dragN=0;$('#drop').classList.remove('on');importFiles([...e.dataTransfer.files]);});
+(async()=>{const s=await idbGet('settings');if(s)S=Object.assign(JSON.parse(JSON.stringify(DEF)),s);
+  const rs=await idbGet('records');if(Array.isArray(rs))for(const r of rs)R[r.z+'|'+r.d+' '+r.hm]=r;rebuild();
+  const a=await idbGet('api');API=(a!=null?a:TH_API_DEFAULT)||'';
+  if(new URLSearchParams(location.search).get('embed'))document.body.classList.add('embed');
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+  render();if(API)await cloudInit();setInterval(tick,60e3);})();
+</script>
+</body>
+</html>
