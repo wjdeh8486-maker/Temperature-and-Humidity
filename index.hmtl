@@ -176,7 +176,7 @@ const V={name:'dash',zone:'incoming',ym:null};
 /* ===== 서버(GAS) 연결 =====
    QMS에 올릴 때 GAS 웹앱 URL을 넣으면 모든 PC가 같은 데이터를 봅니다.
    비워두면 이 PC 브라우저에만 저장하는 단독 모드로 동작합니다. */
-const TH_API_DEFAULT='';
+const TH_API_DEFAULT='https://script.google.com/macros/s/AKfycby1RsKpq2wN0P9jUv2hbVMdhHurGjJfwKbUGNGgZUpQrEUg2TRr6KkSNPgMTAzPLSv8/exec';
 let API='',ZL={},SVER='',lastSync=0,syncErr='',lastInput=Date.now();
 const monthLoaded={};
 const WK=['일','월','화','수','목','금','토'];
