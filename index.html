@@ -67,11 +67,24 @@ table.t .sun{color:#ff8a8a} table.t .sat{color:#9cc7ff}
 table.sheet{font-size:12px}
 table.sheet th,table.sheet td{padding:4px 2px;min-width:30px}
 table.sheet thead th.day{cursor:pointer}
+/* 체크시트: 온도=주황 계열, 습도=파랑 계열로 행 구분, 오전/오후/최고최저 묶음 사이 굵은 선 */
+table.sheet tr.rt th.rowh{background:#fde3cf;color:#8a3a00}
+table.sheet tr.rh th.rowh{background:#d3e8f6;color:#0b4f78}
+table.sheet tr.rt td{color:#b34700}
+table.sheet tr.rh td{color:#0b5c8a}
+table.sheet tr.gs>*{border-top:3px solid var(--navy)}
+table.sheet tr td.warn{background:var(--warnbg);color:var(--warn)}
+table.sheet tr td.ng{background:var(--ngbg);color:var(--ng)}
+.page table.sheet tr.gs>*{border-top:2px solid #000}
 table.sheet thead th.day:hover{background:var(--navy2)}
 /* 상세 */
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .ztabs{display:flex;flex-wrap:wrap;gap:6px}
 .ztabs button.on{background:var(--navy);color:#fff}
+.dpick{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px;border-radius:5px}
+.dpick.on{background:var(--navy)}
+.dpick button{padding:7px 10px}
+.dpick input{font:inherit;font-weight:700;padding:6px 8px;border:2px solid var(--navy);border-radius:4px;color:var(--navy)}
 .mnav{display:flex;align-items:center;gap:6px;margin-left:auto}
 .mnav b{font-size:18px;min-width:120px;text-align:center}
 .kpis{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
@@ -380,17 +393,26 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
   h+='</div>';
   h+=`<p class="hint">구역을 누르면 일별 추이와 체크시트를 봅니다. 작은 그래프: <b style="color:#183b63">온도</b> / <b style="color:#00897b">습도</b></p>`;
   h+=`<h2>구역별 당일 요약</h2><div class="tw">${todayTable(day)}</div>`;
-  if(day){const SP={'24':'최근 24시간','48':'최근 48시간','day':'당일'},sp=SP[V.span]?V.span:'24';
-    let from,to;if(sp==='day'){from=toMs(day+' 00:00');to=from+24*3600e3;}else{to=Math.ceil((toMs(g.d+' '+g.hm)+1)/3600e3)*3600e3;from=to-(+sp)*3600e3;}
+  if(day){const SP={'24':'최근 24시간','48':'최근 48시간','day':'당일'},sp=(SP[V.span]||V.span==='date')?V.span:'24';
+    const pd=V.pdate||day;
+    let from,to;if(sp==='day'||sp==='date'){from=toMs((sp==='date'?pd:day)+' 00:00');to=from+24*3600e3;}else{to=Math.ceil((toMs(g.d+' '+g.hm)+1)/3600e3)*3600e3;from=to-(+sp)*3600e3;}
     const pick=z=>{const out=[];for(let k=3;k>=0;k--){const D=new Date(to-k*24*3600e3),ds=D.getFullYear()+'-'+pad(D.getMonth()+1)+'-'+pad(D.getDate());
       for(const r of (IDX[z]||{})[ds]||[]){const ms=toMs(r.d+' '+r.hm);if(ms>=from&&ms<=to)out.push(r);}}return out;};
     const se=ZONES.map(z=>({recs:pick(z.id),color:z.color,name:z.name})).filter(x=>x.recs.length);
     const lg=`<div class="legend">${se.map(x=>`<span><i style="border-color:${x.color}"></i>${x.name}</span>`).join('')}<span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
-    h+=`<div class="bar"><h2 style="margin:18px 0 6px">시간별 비교</h2><div class="ztabs" style="margin-left:auto">${Object.entries(SP).map(([k,v])=>`<button data-span="${k}" class="${k===sp?'on':''}">${v}</button>`).join('')}</div></div>
+    h+=`<div class="bar"><h2 style="margin:18px 0 6px">시간별 비교 ${sp==='date'?`<span style="font-size:15px;color:#444">(${pd} ${WK[wd(pd)]}요일)</span>`:''}</h2>
+      <div class="ztabs" style="margin-left:auto;align-items:center">${Object.entries(SP).map(([k,v])=>`<button data-span="${k}" class="${k===sp?'on':''}">${v}</button>`).join('')}
+      <span class="dpick ${sp==='date'?'on':''}"><button data-pd="-1" aria-label="전날">◀</button><input type="date" id="spDate" value="${pd}" max="${day}" aria-label="날짜 선택"><button data-pd="1" aria-label="다음날">▶</button></span></div></div>
+      ${se.length?'':'<div class="empty">선택한 기간에 데이터가 없습니다.</div>'}
       <div class="chartbox"><div class="ct">온도(℃) ${lg}</div>${dayChart(se,'t',{from,to})}</div>
       <div class="chartbox"><div class="ct">습도(%) ${lg}</div>${dayChart(se,'h',{from,to})}</div>`;}
   $('#app').innerHTML=h;
   $('#app').querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{V.span=b.dataset.span;render();});
+  const goDate=async d=>{if(!d)return;if(day&&d>day)d=day;V.span='date';V.pdate=d;
+    if(API){try{const ms=[...new Set([d.slice(0,7),dayShift(d,-1).slice(0,7)])];await Promise.all(ZONES.flatMap(z=>ms.map(m=>ensureMonth(z.id,m))));}catch(e){toast('불러오기 실패: '+e.message,'ng');}}
+    render();};
+  const dp=$('#spDate');if(dp){dp.onchange=()=>goDate(dp.value);
+    $('#app').querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>goDate(dayShift(V.span==='date'&&V.pdate?V.pdate:day,+b.dataset.pd)));}
   $('#app').querySelectorAll('.tile').forEach(t=>{const go=()=>{V.name='detail';V.zone=t.dataset.z;V.ym=null;render();window.scrollTo(0,0);};
     t.onclick=go;t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};});
   $('#pDay').onclick=()=>{if(!day)return toast('출력할 데이터가 없습니다','ng');doPrint(printDay(day));};
@@ -406,8 +428,8 @@ function sheetTable(z,ym,forPrint){const N=daysIn(ym);const sums=[];for(let i=1;
   for(let i=1;i<=N;i++){const w=wd(ym+'-'+pad(i));h+=`<th class="${forPrint?'':'day'} ${w===0?'sun':w===6?'sat':''}" data-d="${ym}-${pad(i)}">${i}</th>`;}
   h+=`</tr><tr><th colspan="2">요일</th>`;for(let i=1;i<=N;i++){const w=wd(ym+'-'+pad(i));h+=`<th class="${w===0?'sun':w===6?'sat':''}">${WK[w]}</th>`;}h+='</tr></thead><tbody>';
   const rows=[['온도(오전)','t',s=>s.am&&s.am.t,f1],['습도(오전)','h',s=>s.am&&s.am.h,f0],['온도(오후)','t',s=>s.pm&&s.pm.t,f1],['습도(오후)','h',s=>s.pm&&s.pm.h,f0],
-    ['최고 온도','t',s=>s.tMax,f1],['최저 온도','t',s=>s.tMin,f1],['최고 습도','h',s=>s.hMax,f0],['최저 습도','h',s=>s.hMin,f0]];
-  rows.forEach(([nm,k,g,fm])=>{h+=`<tr><th class="rowh">${nm}</th><th class="rowh" style="font-size:11px">${stdShort(k)}</th>`;
+    ['▲ 최고 온도','t',s=>s.tMax,f1],['▼ 최저 온도','t',s=>s.tMin,f1],['▲ 최고 습도','h',s=>s.hMax,f0],['▼ 최저 습도','h',s=>s.hMin,f0]];
+  rows.forEach(([nm,k,g,fm],ri)=>{h+=`<tr class="r${k}${ri===2||ri===4||ri===6?' gs':''}"><th class="rowh">${nm}</th><th class="rowh" style="font-size:11px">${stdShort(k)}</th>`;
     for(const s of sums){const v=s?g(s):null;h+=vc(v==null?null:v,k,fm);}h+='</tr>';});
   return h+'</tbody></table>';}
 function stdShort(k){const L=lim(k),u=k==='t'?'℃':'%';return `${(L.mn+L.mx)/2}${u}±${(L.mx-L.mn)/2}`;}
