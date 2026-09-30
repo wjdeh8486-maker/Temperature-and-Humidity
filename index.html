@@ -2624,7 +2624,7 @@ var QMS_GS_URL = "https://script.google.com/macros/s/AKfycbyGUt0yGmidzisFSPjwb2X
             <button type="button" id="insrep-ncrBtn" style="background:#8A1F1F;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;" title="미조치 부적합에서 NCR(부적합보고서) 엑셀 발행">📄 NCR 출력</button>
             <button type="button" id="insrep-exportBtn" style="background:#1E7A46;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;">📥 엑셀 다운로드</button>
             <button type="button" id="insrep-masterExBtn" style="background:#0B7A8A;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;" title="S/N을 개별 행으로 펼쳐서(26025-1~8 → 8행). 부적합은 (기스)/(찍힘) 표시된 S/N에만 배정">📋 붙여넣기용</button>
-            <button type="button" onclick="insAutoPanel_()" style="background:#5B3EAE;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;" title="평일 08:50 엑셀 4종 · 08:55 붙여넣기용(S/N 펼침) 자동 다운로드 설정·현황">⏰ 자동 다운로드</button>
+            <button type="button" onclick="insAutoPanel_()" style="background:#5B3EAE;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;" title="평일 08:50 엑셀 5종 · 08:55 붙여넣기용(S/N 펼침) 자동 다운로드 설정·현황">⏰ 자동 다운로드</button>
             <button type="button" id="insrep-sheetLoadBtn" style="background:#0B7A8A;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;" title="구글시트(4탭)에서 불러오기 — 최근 30일 + 부적합 미처리">🔄 시트에서 불러오기</button>
             <div class="mm-lab">인쇄 · 불러오기</div>
             <button type="button" id="insrep-printBtn" style="background:#334155;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
@@ -22019,7 +22019,7 @@ function insProcInCloudLoad(){
   }).catch(function(){ insSetStatus("[공정입고] 불러오기 실패 \u2014 네트워크 확인"); });
 }
 /* ==================== ⏰ 검사일보 자동 다운로드 ====================
-   · 평일(월~금)  08:50 [엑셀 다운로드] 4종(수입·측정 소/대·출하)  /  08:55 [붙여넣기용] S/N 펼침
+   · 평일(월~금)  08:50 [엑셀 다운로드] 5종(수입·측정 소/대·출하·공정입고)  /  08:55 [붙여넣기용] S/N 펼침
    · 대상 날짜 = 직전 근무일 (월요일이면 금요일) — 아침에는 그날 행이 거의 없으므로
    · 포털이 켜진 PC 중 "한 대만" 받음: 공유 칸 insAutoExport 에 먼저 이름을 올린 PC가 담당(나머지는 건너뜀)
    · 그 시각에 켜진 PC가 없으면, 그날 처음 포털을 연(참여) PC가 늦게라도 받음
@@ -22062,12 +22062,14 @@ function insAutoRun_(kind, date, cb){
       cb(true, msgs.length?msgs.join(" / "):"붙여넣기용(S/N 펼침) "+date);
       return;
     }
-    var i=0, done=[], errN=0;
+    var i=0, done=[], errN=0, EXP=INS_AUTO_TYPES.concat(["processin"]);   // [추가] 공정입고(수입→측정실, 측정→크린룸 입고)도 함께
     (function next(){
-      if(i>=INS_AUTO_TYPES.length){ cb(errN<INS_AUTO_TYPES.length, done.join(", ")+(msgs.length?(" · "+msgs.join(" / ")):"")); return; }   // 4종 모두 오류면 실패로 기록
-      var t=INS_AUTO_TYPES[i++], before=msgs.length;
-      var __err=false; try{ useCopy(); insType=t; insExport(); }catch(e){ __err=true; errN++; msgs.push(t+" 오류: "+(e&&e.message||e)); } finally{ restore(); }
-      var lab=(INS_CFG[t]&&INS_CFG[t].title)||t;
+      if(i>=EXP.length){ cb(errN<EXP.length, done.join(", ")+(msgs.length?(" · "+msgs.join(" / ")):"")); return; }   // 모두 오류면 실패로 기록
+      var t=EXP[i++], before=msgs.length;
+      var __err=false, __pis=(typeof insProcInSource!=="undefined")?insProcInSource:null;
+      try{ useCopy(); if(t==="processin"){ try{ insProcInSource=null; }catch(_){} }   // 공정입고는 방금 시트에서 읽은 사본으로 집계
+        insType=t; insExport(); }catch(e){ __err=true; errN++; msgs.push(t+" 오류: "+(e&&e.message||e)); } finally{ restore(); if(t==="processin"){ try{ insProcInSource=__pis; }catch(_){} } }
+      var lab=(t==="processin")?"공정입고":((INS_CFG[t]&&INS_CFG[t].title)||t);
       done.push(lab+(__err?"(오류)":(msgs.length>before?"(행 없음)":"")));
       setTimeout(next, 900);   // 연속 다운로드 간격
     })();
@@ -22106,7 +22108,7 @@ function insAutoTry_(kind){
             insAutoSave_(st2, kind);
             if(ok) __insAuto.done[today+kind]=true;
             __insAuto.busy[kind]=false;
-            try{ insSetStatus("⏰ 자동 다운로드 ("+(kind==="excel"?"엑셀 4종":"붙여넣기용")+", "+target+") — "+(ok?"완료":"실패")+(where.length?(" → "+where.join(" / ")):(ok?"":": "+msg))); }catch(_){}
+            try{ insSetStatus("⏰ 자동 다운로드 ("+(kind==="excel"?"엑셀 5종":"붙여넣기용")+", "+target+") — "+(ok?"완료":"실패")+(where.length?(" → "+where.join(" / ")):(ok?"":": "+msg))); }catch(_){}
           }, 3000); });
         });
       }, 4000+Math.floor(Math.random()*4000));
@@ -22147,7 +22149,7 @@ function insAutoPanel_(){
   ov.innerHTML='<div style="background:#fff;border-radius:14px;width:min(560px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden;font-size:13.5px;color:#101828;">'
     +'<div style="display:flex;align-items:center;padding:14px 18px;background:#1F2A44;color:#fff;"><b style="font-size:15px;">⏰ 검사일보 자동 다운로드</b><button type="button" data-x="close" style="margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:4px 12px;cursor:pointer;">닫기 ✕</button></div>'
     +'<div style="padding:16px 18px;line-height:1.7;">'
-    +'<div style="display:flex;align-items:center;gap:8px;">· 평일 <input type="time" id="insauto-tex" value="'+INS_AUTO_CFG.excel+'" style="padding:4px 8px;border:1px solid #98A2B3;border-radius:8px;font-weight:700;"> 엑셀 다운로드 4종 (수입·측정 소/대·출하)</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;">· 평일 <input type="time" id="insauto-tex" value="'+INS_AUTO_CFG.excel+'" style="padding:4px 8px;border:1px solid #98A2B3;border-radius:8px;font-weight:700;"> 엑셀 다운로드 5종 (수입·측정 소/대·출하·공정입고)</div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">· 평일 <input type="time" id="insauto-tms" value="'+INS_AUTO_CFG.master+'" style="padding:4px 8px;border:1px solid #98A2B3;border-radius:8px;font-weight:700;"> 붙여넣기용 (S/N 펼침)</div>'
     +'<div style="color:#667085;font-size:12px;margin:2px 0 4px;">시각을 바꾸면 모든 PC에 3분 안에 적용됩니다. 아직 안 지난 시각으로 바꾸면 오늘 이미 받았어도 그 시각에 한 번 더 받습니다 (테스트용).</div>'
     +'<div>· 대상 날짜: <b>직전 근무일</b> (오늘 기준 '+E(insAutoTarget_())+')</div>'
@@ -22157,7 +22159,7 @@ function insAutoPanel_(){
     +'<div style="margin-top:4px;padding:10px 12px;border:1px solid #D0D5DD;border-radius:10px;"><b>다운로드 담당 PC</b> <span style="color:#667085;font-size:12px;">(여기 있는 PC만 자동으로 받습니다)</span><div id="insauto-pcs" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">'+((INS_AUTO_CFG.pcs||[]).length?(INS_AUTO_CFG.pcs||[]).map(function(n){ return '<span style="display:inline-flex;align-items:center;gap:6px;background:'+(n===insAutoPcName_()?'#EFF4FF':'#F2F4F7')+';border:1px solid #D0D5DD;border-radius:999px;padding:3px 6px 3px 10px;font-weight:700;">'+E(n)+(n===insAutoPcName_()?' (이 PC)':'')+'<button type="button" data-rm="'+E(n)+'" title="담당에서 빼기" style="border:0;background:transparent;color:#98A2B3;cursor:pointer;font-size:14px;">✕</button></span>'; }).join(''):'<span style="color:#B42318;font-weight:700;">지정된 PC 없음 — 지금은 아무도 자동으로 받지 않습니다</span>')+'</div><button type="button" data-x="me" style="padding:6px 12px;border:0;border-radius:8px;background:'+(insAutoOn_()?'#F2F4F7':'#2563EB')+';color:'+(insAutoOn_()?'#344054':'#fff')+';font-weight:700;cursor:pointer;">'+(insAutoOn_()?'이 PC를 담당에서 빼기':'이 PC를 담당으로 지정')+'</button></div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">이 PC 이름 <input id="insauto-pc" value="'+E(insAutoPcName_())+'" style="flex:1;padding:6px 10px;border:1px solid #D0D5DD;border-radius:8px;"></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap;">'
-    +'<button type="button" data-x="run-excel" style="padding:8px 14px;border:1px solid #D0D5DD;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">지금 받기: 엑셀 4종</button>'
+    +'<button type="button" data-x="run-excel" style="padding:8px 14px;border:1px solid #D0D5DD;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">지금 받기: 엑셀 5종</button>'
     +'<button type="button" data-x="run-master" style="padding:8px 14px;border:1px solid #D0D5DD;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">지금 받기: 붙여넣기용</button>'
     +'<button type="button" data-x="save" style="padding:8px 16px;border:0;border-radius:8px;background:#2563EB;color:#fff;cursor:pointer;font-weight:700;">저장</button></div>'
     +'<div style="color:#667085;font-size:12px;margin-top:6px;text-align:right;">"지금 받기"는 이 PC에서 바로 직전 근무일분을 받습니다 (자동 기록과 무관)</div>'
@@ -22180,7 +22182,7 @@ function insAutoPanel_(){
   insAutoDirPaint_();
   insAutoLoad_(function(stE){ insAutoLoad_(function(stM){ var el=document.getElementById("insauto-st"); if(!el) return; var d={ excel:(stE[insAutoToday_()]||{}).excel, master:(stM[insAutoToday_()]||{}).master };
     var line=function(k,lab){ var c=d[k]; if(!c) return "· "+lab+": 아직 안 받음"; var tm=c.ts?new Date(c.ts).toTimeString().slice(0,5):""; return "· "+lab+": "+(c.state==="done"?"✓ 완료":(c.state==="fail"?"⚠ 실패":"처리 중"))+" — "+E(c.pc||"")+" "+tm+(c.date?(" ("+E(c.date)+"분)"):"")+(c.msg&&(c.state!=="done"||/→/.test(c.msg))?(" · "+E(c.state==="done"?c.msg.slice(c.msg.indexOf("→")):c.msg)):""); };
-    el.innerHTML="<b>오늘 현황</b><br>"+line("excel","엑셀 4종 ("+INS_AUTO_CFG.excel+")")+"<br>"+line("master","붙여넣기용 ("+INS_AUTO_CFG.master+")"); }, "master"); }, "excel");
+    el.innerHTML="<b>오늘 현황</b><br>"+line("excel","엑셀 5종 ("+INS_AUTO_CFG.excel+")")+"<br>"+line("master","붙여넣기용 ("+INS_AUTO_CFG.master+")"); }, "master"); }, "excel");
 }
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", function(){ setTimeout(insAutoStart_, 3000); }); else setTimeout(insAutoStart_, 3000);
 function insExportProcessIn(){
