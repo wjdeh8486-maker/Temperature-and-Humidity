@@ -314,12 +314,20 @@ function monthChart(z,ym,kind,opt){opt=opt||{};const N=daysIn(ym),W=opt.w||1000,
 function dayChart(series,kind,opt){opt=opt||{};const W=opt.w||1000,H=opt.h||240,P={l:40,r:10,t:12,b:26};
   const vals=[];series.forEach(se=>se.recs.forEach(r=>vals.push(kind==='t'?r.t:r.h)));
   const yr=yRange(kind,vals.length?vals:[lim(kind).mn]);const F=frame(kind,W,H,P,yr),y=F.y;
-  const x=hm=>{const [h,m]=hm.split(':').map(Number);return P.l+(h+m/60)/24*(W-P.l-P.r);};let s=F.s;
-  for(let h=0;h<=24;h+=2)s+=`<text x="${P.l+h/24*(W-P.l-P.r)}" y="${H-8}" text-anchor="middle" font-size="11" font-weight="700" fill="#333">${h}시</text>`;
-  const band=(w,c)=>{const [a,b]=[x(w[0]),x(w[1])];return `<rect x="${a}" y="${P.t}" width="${Math.max(2,b-a)}" height="${H-P.t-P.b}" fill="${c}" opacity=".13"/>`;};
-  s+=band(S.am,'#183b63')+band(S.pm,'#e65100');
+  let from=opt.from,to=opt.to;
+  if(from==null){const f=series.find(se=>se.recs.length);from=toMs((f?f.recs[0].d:todayStr())+' 00:00');to=from+24*3600e3;}
+  const span=to-from,XW=W-P.l-P.r,xm=ms=>P.l+(ms-from)/span*XW,x=r=>xm(toMs(r.d+' '+r.hm));let s=F.s;
+  const stepH=span<=26*3600e3?2:span<=50*3600e3?4:6;
+  for(let t=Math.ceil(from/3600e3)*3600e3;t<=to;t+=3600e3){const D=new Date(t),hh=D.getHours();if(hh%stepH)continue;
+    const X=xm(t),mid=hh===0&&t>from&&t<to;
+    if(mid)s+=`<line x1="${X}" x2="${X}" y1="${P.t}" y2="${H-P.b}" stroke="#56677a" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    s+=`<text x="${X}" y="${H-8}" text-anchor="middle" font-size="11" font-weight="${mid?800:700}" fill="${mid?'#183b63':'#333'}">${mid?(D.getMonth()+1)+'/'+D.getDate():hh+'시'}</text>`;}
+  for(let d0=toMs(new Date(from).getFullYear()+'-'+pad(new Date(from).getMonth()+1)+'-'+pad(new Date(from).getDate())+' 00:00');d0<to;d0+=24*3600e3){
+    const D=new Date(d0),ds=D.getFullYear()+'-'+pad(D.getMonth()+1)+'-'+pad(D.getDate());
+    for(const [w,c] of [[S.am,'#183b63'],[S.pm,'#e65100']]){const a=Math.max(from,toMs(ds+' '+w[0])),b=Math.min(to,toMs(ds+' '+w[1]));
+      if(b>a)s+=`<rect x="${xm(a)}" y="${P.t}" width="${Math.max(2,xm(b)-xm(a))}" height="${H-P.t-P.b}" fill="${c}" opacity=".13"/>`;}}
   series.forEach(se=>{const pts=[];let prev=null,ds='';
-    se.recs.forEach(r=>{const v=kind==='t'?r.t:r.h,X=x(r.hm),Y=y(v);
+    se.recs.forEach(r=>{const ms=toMs(r.d+' '+r.hm);if(ms<from||ms>to)return;const v=kind==='t'?r.t:r.h,X=x(r),Y=y(v);
       if(prev&&toMs(r.d+' '+r.hm)-toMs(prev.d+' '+prev.hm)>2.5*3600e3)pts.push(null);pts.push([X,Y]);prev=r;
       if(st(v,kind)!=='ok'||se.recs.length<=30)ds+=dot(X,Y,v,kind,se.color,'c');});
     s+=`<path d="${path(pts)}" fill="none" stroke="${se.color}" stroke-width="2.4"/>`+ds;});
@@ -372,11 +380,17 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
   h+='</div>';
   h+=`<p class="hint">구역을 누르면 일별 추이와 체크시트를 봅니다. 작은 그래프: <b style="color:#183b63">온도</b> / <b style="color:#00897b">습도</b></p>`;
   h+=`<h2>구역별 당일 요약</h2><div class="tw">${todayTable(day)}</div>`;
-  if(day){const se=ZONES.map(z=>({recs:(IDX[z.id]||{})[day]||[],color:z.color,name:z.name})).filter(x=>x.recs.length);
+  if(day){const SP={'24':'최근 24시간','48':'최근 48시간','day':'당일'},sp=SP[V.span]?V.span:'24';
+    let from,to;if(sp==='day'){from=toMs(day+' 00:00');to=from+24*3600e3;}else{to=Math.ceil((toMs(g.d+' '+g.hm)+1)/3600e3)*3600e3;from=to-(+sp)*3600e3;}
+    const pick=z=>{const out=[];for(let k=3;k>=0;k--){const D=new Date(to-k*24*3600e3),ds=D.getFullYear()+'-'+pad(D.getMonth()+1)+'-'+pad(D.getDate());
+      for(const r of (IDX[z]||{})[ds]||[]){const ms=toMs(r.d+' '+r.hm);if(ms>=from&&ms<=to)out.push(r);}}return out;};
+    const se=ZONES.map(z=>({recs:pick(z.id),color:z.color,name:z.name})).filter(x=>x.recs.length);
     const lg=`<div class="legend">${se.map(x=>`<span><i style="border-color:${x.color}"></i>${x.name}</span>`).join('')}<span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
-    h+=`<h2>당일 시간별 비교</h2><div class="chartbox"><div class="ct">온도(℃) ${lg}</div>${dayChart(se,'t')}</div>
-      <div class="chartbox"><div class="ct">습도(%) ${lg}</div>${dayChart(se,'h')}</div>`;}
+    h+=`<div class="bar"><h2 style="margin:18px 0 6px">시간별 비교</h2><div class="ztabs" style="margin-left:auto">${Object.entries(SP).map(([k,v])=>`<button data-span="${k}" class="${k===sp?'on':''}">${v}</button>`).join('')}</div></div>
+      <div class="chartbox"><div class="ct">온도(℃) ${lg}</div>${dayChart(se,'t',{from,to})}</div>
+      <div class="chartbox"><div class="ct">습도(%) ${lg}</div>${dayChart(se,'h',{from,to})}</div>`;}
   $('#app').innerHTML=h;
+  $('#app').querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{V.span=b.dataset.span;render();});
   $('#app').querySelectorAll('.tile').forEach(t=>{const go=()=>{V.name='detail';V.zone=t.dataset.z;V.ym=null;render();window.scrollTo(0,0);};
     t.onclick=go;t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};});
   $('#pDay').onclick=()=>{if(!day)return toast('출력할 데이터가 없습니다','ng');doPrint(printDay(day));};
@@ -424,16 +438,21 @@ function renderDetail(){const z=V.zone,zo=zoneOf(z);const zl=zoneLatest(z),g=glo
   $('#pSheet').onclick=()=>doPrint(printSheet(z,ym));$('#xls').onclick=()=>exportXlsx(z,ym);
   $('#app').querySelectorAll('[data-d]').forEach(el=>el.addEventListener('click',()=>openDay(z,el.dataset.d)));}
 
-function openDay(z,d){const a=(IDX[z]||{})[d]||[];const zo=zoneOf(z);
-  const o=document.createElement('div');o.className='ov';
+function dayShift(d,k){const [y,m,dd]=d.split('-').map(Number);const D=new Date(y,m-1,dd+k);return D.getFullYear()+'-'+pad(D.getMonth()+1)+'-'+pad(D.getDate());}
+async function openDay(z,d){const old=document.querySelector('.ov.dayov');if(old)old.remove();
+  if(API){try{await ensureMonth(z,d.slice(0,7));}catch(e){}}
+  const a=(IDX[z]||{})[d]||[];const zo=zoneOf(z);
+  const o=document.createElement('div');o.className='ov dayov';
   const se=[{recs:a,color:'#183b63'}],seH=[{recs:a,color:'#00897b'}];
-  o.innerHTML=`<div class="card"><h3>${zo.name} ${d} (${WK[wd(d)]}) 시간별 기록</h3>
+  o.innerHTML=`<div class="card"><div class="bar"><h3 style="margin:0">${zo.name} ${d} (${WK[wd(d)]}) 시간별 기록</h3>
+    <div class="mnav"><button data-nav="-1">◀ 전날</button><button data-nav="1">다음날 ▶</button></div></div>
     ${a.length?`<div class="chartbox"><div class="ct">온도(℃)</div>${dayChart(se,'t',{h:210})}</div><div class="chartbox"><div class="ct">습도(%)</div>${dayChart(seH,'h',{h:210})}</div>
     <div class="tw" style="margin-top:10px;max-height:300px;overflow:auto"><table class="t"><thead><tr><th>시각</th><th>온도(℃)</th><th>습도(%)</th><th>판정</th></tr></thead><tbody>
     ${a.map(r=>{const w=worse(st(r.t,'t'),st(r.h,'h'));return `<tr><td>${r.hm}</td>${vc(r.t,'t',f1)}${vc(r.h,'h',f0)}<td><span class="badge ${w}">${ST_TXT[w]}</span></td></tr>`;}).join('')}</tbody></table></div>`
     :'<div class="empty">이 날의 기록이 없습니다.</div>'}
     <div class="foot"><button class="pri" data-x>닫기</button></div></div>`;
-  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]'))o.remove();});
+  o.addEventListener('click',e=>{const nv=e.target.closest('[data-nav]');if(nv)return openDay(z,dayShift(d,+nv.dataset.nav));
+    if(e.target===o||e.target.closest('[data-x]'))o.remove();});
   document.body.appendChild(o);o.querySelector('[data-x]').focus();}
 
 /* ===== 출력 ===== */
