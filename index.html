@@ -27,6 +27,12 @@ button:focus-visible,.tile:focus-visible{outline:3px solid #f2b705;outline-offse
 .top .sync.err{background:var(--ng)}
 .top .clock{font-size:15px;font-weight:800}
 .embed .top .brand{display:none}
+.gsw{display:flex;gap:4px}
+.gsw button{border-color:#fff;color:#fff;background:transparent;padding:5px 12px}
+.gsw button.on{background:#fff;color:var(--navy)}
+.legend .tg{cursor:pointer;user-select:none;padding:1px 4px;border-radius:3px}
+.legend .tg:hover{background:var(--soft)}
+.legend .tg.off{opacity:.35;text-decoration:line-through}
 .alert{background:var(--ngbg);border:2px solid var(--ng);color:var(--ng);font-weight:800;padding:10px 14px;border-radius:4px;margin:6px 0 10px;font-size:15px}
 .card input.url{width:100%;font:inherit;padding:5px 8px;border:2px solid var(--line);border-radius:4px}
 .top .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
@@ -150,7 +156,8 @@ svg .hit:hover{fill:rgba(24,59,99,.08)}
 </head>
 <body>
 <header class="top">
-  <div class="brand"><b>온·습도 관리</b><span>품질팀 관리구역 5곳</span></div>
+  <div class="brand"><b>온·습도 관리</b><span id="brandSub"></span></div>
+  <div class="gsw" id="gsw"></div>
   <div class="basis">최종 기준 시간<b id="lastTs">-</b></div>
   <div class="clock" id="clock"></div>
   <div class="sync" id="sync"></div>
@@ -169,27 +176,45 @@ svg .hit:hover{fill:rgba(24,59,99,.08)}
 <script>
 'use strict';
 /* ===== 구역 / 기본 설정 ===== */
-const ZONES=[
-  {id:'incoming',name:'수입검사',room:'수입검사실',kw:['수입'],color:'#1f4e8c'},
-  {id:'process', name:'공정검사',room:'공정검사실',kw:['공정'],color:'#00897b'},
-  {id:'clean',   name:'크린룸',  room:'크린룸',kw:['크린','클린','clean'],color:'#8e24aa'},
-  {id:'pack',    name:'포장실',  room:'포장실',kw:['포장'],color:'#6d4c41'},
-  {id:'store',   name:'완제품 보관',room:'완제품 보관장소',kw:['완제품','보관'],color:'#e65100'}
-];
+/* 구역 그룹: 주소 뒤 ?g=mfg 로 제조 그룹, 없으면 품질팀 그룹. 기준·설정은 두 그룹 공통 */
+const PAL=['#1f4e8c','#00897b','#8e24aa','#6d4c41','#e65100','#c2185b','#558b2f','#0097a7','#5e35b1','#37474f'];
+const GROUPS={
+  qc:{name:'품질팀',sub:'품질팀 관리구역',zones:[
+    {id:'incoming',name:'수입검사',room:'수입검사실',kw:['수입']},
+    {id:'process', name:'공정검사',room:'공정검사실',kw:['공정','측정']}, // 센서 '측정실' = 공정검사
+    {id:'clean',   name:'크린룸',  room:'크린룸',kw:['크린','클린','clean']},
+    {id:'pack',    name:'포장실',  room:'포장실',kw:['포장']},
+    {id:'store',   name:'완제품 보관',room:'완제품 보관장소',kw:['완제품','보관']}]},
+  mfg:{name:'제조',sub:'제조 관리구역',zones:[
+    {id:'m1',  name:'제조1',room:'제조1',kw:['제조1']},
+    {id:'m2',  name:'제조2',room:'제조2',kw:['제조2']},
+    {id:'m3',  name:'제조3',room:'제조3',kw:['제조3']},
+    {id:'ap',  name:'AP',room:'AP',kw:[/(^|[^a-z])ap([^a-z]|$)/i]},
+    {id:'raw', name:'원자재창고',room:'원자재창고',kw:['원자재']},
+    {id:'semi',name:'반제품창고',room:'반제품창고',kw:['반제품']},
+    {id:'ship',name:'출하장',room:'출하장',kw:['출하']},
+    {id:'weld',name:'용접실',room:'용접실',kw:['용접']},
+    {id:'etc1',name:'기타1',room:'기타1',kw:['기타1']},
+    {id:'etc2',name:'기타2',room:'기타2',kw:['기타2']}]}
+};
+for(const g of Object.values(GROUPS))g.zones.forEach((z,i)=>{z.color=PAL[i];z.group=g;});
+const ALL_ZONES=[...GROUPS.mfg.zones,...GROUPS.qc.zones]; // 자동 분류는 구체적인 이름(원자재 등)을 먼저 검사
+let GK=new URLSearchParams(location.search).get('g')==='mfg'?'mfg':'qc',G=GROUPS[GK],ZONES=G.zones;
 const DEF={
   tMin:15,tMax:25,tLimMin:15,tLimMax:25,   // 온도 관리기준 / 사용범위
-  hMin:20,hMax:60,hLimMin:15,hLimMax:65,   // 습도 관리기준 / 사용범위
+  hMin:20,hMax:60,hLimMin:15,hLimMax:65,   // 습도 관리기준 / 사용범위 (품질팀 그룹)
+  mfg:{tMin:15,tMax:25,tLimMin:15,tLimMax:25,hMin:15,hMax:65,hLimMin:15,hLimMax:65}, // 제조 그룹: 온도 20±5, 습도 40±25
   am:['08:00','09:00'], pm:['13:00','14:00'],
   stale:3, sensorMap:{}
 };
 let S=JSON.parse(JSON.stringify(DEF));
 let R={};      // key "zone|YYYY-MM-DD HH:MM" -> {z,d,hm,t,h}
 let IDX={};    // zone -> date -> [rec sorted]
-const V={name:'dash',zone:'incoming',ym:null};
+const V={name:'dash',zone:ZONES[0].id,ym:null,hide:new Set()};
 /* ===== 서버(GAS) 연결 =====
    QMS에 올릴 때 GAS 웹앱 URL을 넣으면 모든 PC가 같은 데이터를 봅니다.
    비워두면 이 PC 브라우저에만 저장하는 단독 모드로 동작합니다. */
-const TH_API_DEFAULT='https://script.google.com/macros/s/AKfycby1RsKpq2wN0P9jUv2hbVMdhHurGjJfwKbUGNGgZUpQrEUg2TRr6KkSNPgMTAzPLSv8/exec';
+const TH_API_DEFAULT='https://script.google.com/macros/s/AKfycbyTn9AgrHA4xunuwMAsrz_N7KIgC0Mjb8YPUHMV95OSbUj7SwMSibNuRN7jsmZ0Hhwa/exec';
 let API='',ZL={},SVER='',lastSync=0,syncErr='',lastInput=Date.now();
 const monthLoaded={};
 const WK=['일','월','화','수','목','금','토'];
@@ -197,7 +222,7 @@ const WK=['일','월','화','수','목','금','토'];
 const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,'0');
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const zoneOf=id=>ZONES.find(z=>z.id===id);
+const zoneOf=id=>ALL_ZONES.find(z=>z.id===id);
 const f1=v=>v==null||isNaN(v)?'-':(Math.round(v*10)/10).toFixed(1);
 const f0=v=>v==null||isNaN(v)?'-':String(Math.round(v));
 function toMs(s){const m=s.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);return m?new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5]).getTime():0;}
@@ -217,7 +242,8 @@ async function saveSettings(){await idbSet('settings',S);
   if(API){try{await apiPost({action:'th_settings_save',settings:S});}catch(e){toast('설정을 서버에 저장하지 못했습니다: '+e.message,'ng');}}}
 
 /* ===== 판정 ===== */
-function lim(kind){return kind==='t'?{mn:S.tMin,mx:S.tMax,lmn:S.tLimMin,lmx:S.tLimMax}:{mn:S.hMin,mx:S.hMax,lmn:S.hLimMin,lmx:S.hLimMax};}
+function limSet(){if(GK==='mfg'){if(!S.mfg)S.mfg=JSON.parse(JSON.stringify(DEF.mfg));return S.mfg;}return S;}
+function lim(kind){const L=limSet();return kind==='t'?{mn:L.tMin,mx:L.tMax,lmn:L.tLimMin,lmx:L.tLimMax}:{mn:L.hMin,mx:L.hMax,lmn:L.hLimMin,lmx:L.hLimMax};}
 function st(v,kind){if(v==null||isNaN(v))return '';const L=lim(kind);if(v<L.lmn||v>L.lmx)return 'ng';if(v<L.mn||v>L.mx)return 'warn';return 'ok';}
 const worse=(a,b)=>{const o={'':0,ok:1,warn:2,ng:3};return o[a]>=o[b]?a:b;};
 const ST_TXT={ok:'적합',warn:'관리기준 이탈',ng:'사용범위 이탈'};
@@ -232,7 +258,7 @@ function decodeName(n){let s=n;
   }return s;}
 function sensorKey(name){return name.replace(/\.csv_?$/i,'').replace(/\d{6,8}/g,'').replace(/[_\s]+$/,'');}
 function detectZone(name){const k=sensorKey(name);if(S.sensorMap[k])return S.sensorMap[k];
-  const low=name.toLowerCase();for(const z of ZONES){if(z.kw.some(w=>low.includes(w.toLowerCase())))return z.id;}return null;}
+  const low=name.toLowerCase();for(const z of ALL_ZONES){if(z.kw.some(w=>w instanceof RegExp?w.test(name):low.includes(w.toLowerCase())))return z.id;}return null;}
 function parseDate(s){let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return `${m[3]}-${pad(m[1])}-${pad(m[2])}`;
   m=s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;return null;}
 function parseTime(s){const m=s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|오전|오후)?$/i);if(!m)return null;
@@ -352,6 +378,9 @@ function spark(recs){if(!recs||recs.length<2)return '';const W=200,H=34;const mk
 
 /* ===== 공통 화면 조각 ===== */
 function renderHeader(){const g=globalLatest();$('#lastTs').textContent=g?`${g.d} ${g.hm}`:'-';
+  $('#brandSub').textContent=`${G.sub} ${ZONES.length}곳`;document.title=`온·습도 관리(${G.name}) | NTL`;
+  $('#gsw').innerHTML=Object.entries(GROUPS).map(([k,x])=>`<button data-g="${k}" class="${k===GK?'on':''}">${x.name} ${x.zones.length}곳</button>`).join('');
+  $('#gsw').querySelectorAll('button').forEach(b=>b.onclick=()=>setGroup(b.dataset.g));
   const n=new Date();$('#clock').textContent=`현재 ${pad(n.getHours())}:${pad(n.getMinutes())}`;
   const sy=$('#sync');if(!API){sy.textContent='이 PC 저장 모드';sy.className='sync';}
   else if(syncErr){sy.textContent='서버 연결 실패';sy.title=syncErr;sy.className='sync err';}
@@ -373,9 +402,9 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
   let h='';
   if(g&&now-toMs(g.d+' '+g.hm)>=S.stale*3600e3){const hr=Math.floor((now-toMs(g.d+' '+g.hm))/3600e3);
     h+=`<div class="alert">최종 데이터가 ${hr}시간 전(${g.d} ${g.hm})입니다. 센서 메일 수신 또는 CSV 업로드 상태를 확인하세요.</div>`;}
-  if(!g)h+=`<div class="empty">TempPro 메일로 받은 CSV 파일을 이 화면에 끌어다 놓거나 [CSV 업로드]를 누르세요.<br><span style="font-weight:400;font-size:14px">파일 이름에 구역명(수입검사·공정검사·크린룸·포장·완제품 보관)이 들어 있으면 자동으로 분류됩니다.</span></div>`;
+  if(!g)h+=`<div class="empty">TempPro 메일로 받은 CSV 파일을 이 화면에 끌어다 놓거나 [CSV 업로드]를 누르세요.<br><span style="font-weight:400;font-size:14px">파일 이름에 구역명(${ZONES.map(z=>z.name).join('·')})이 들어 있으면 자동으로 분류됩니다.</span></div>`;
   h+=`<div class="bar"><h2 style="margin:6px 0">당일 현황 ${day?`<span style="font-size:15px;color:#444">(${day} ${WK[wd(day)]}요일)</span>`:''}</h2>
-    <div class="mnav"><button id="pDay">당일 현황 출력</button><button id="pAll">5개 구역 월간 체크시트 출력</button></div></div>`;
+    <div class="mnav"><button id="pDay">당일 현황 출력</button><button id="pAll">${ZONES.length}개 구역 월간 체크시트 출력</button></div></div>`;
   h+='<div class="tiles">';
   for(const z of ZONES){const s=day?daySum(z.id,day):null,zl=zoneLatest(z.id);
     const late=zl&&now-toMs(zl.d+' '+zl.hm)>=S.stale*3600e3;
@@ -398,8 +427,9 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
     let from,to;if(sp==='day'||sp==='date'){from=toMs((sp==='date'?pd:day)+' 00:00');to=from+24*3600e3;}else{to=Math.ceil((toMs(g.d+' '+g.hm)+1)/3600e3)*3600e3;from=to-(+sp)*3600e3;}
     const pick=z=>{const out=[];for(let k=3;k>=0;k--){const D=new Date(to-k*24*3600e3),ds=D.getFullYear()+'-'+pad(D.getMonth()+1)+'-'+pad(D.getDate());
       for(const r of (IDX[z]||{})[ds]||[]){const ms=toMs(r.d+' '+r.hm);if(ms>=from&&ms<=to)out.push(r);}}return out;};
-    const se=ZONES.map(z=>({recs:pick(z.id),color:z.color,name:z.name})).filter(x=>x.recs.length);
-    const lg=`<div class="legend">${se.map(x=>`<span><i style="border-color:${x.color}"></i>${x.name}</span>`).join('')}<span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
+    const all=ZONES.map(z=>({id:z.id,recs:pick(z.id),color:z.color,name:z.name})).filter(x=>x.recs.length);
+    const se=all.filter(x=>!V.hide.has(x.id));
+    const lg=`<div class="legend">${all.map(x=>`<span class="tg ${V.hide.has(x.id)?'off':''}" data-tg="${x.id}" title="눌러서 보이기/숨기기"><i style="border-color:${x.color}"></i>${x.name}</span>`).join('')}<span><i class="band"></i>관리기준</span><span><i class="dash" style="border-color:#c62828"></i>한계</span></div>`;
     h+=`<div class="bar"><h2 style="margin:18px 0 6px">시간별 비교 ${sp==='date'?`<span style="font-size:15px;color:#444">(${pd} ${WK[wd(pd)]}요일)</span>`:''}</h2>
       <div class="ztabs" style="margin-left:auto;align-items:center">${Object.entries(SP).map(([k,v])=>`<button data-span="${k}" class="${k===sp?'on':''}">${v}</button>`).join('')}
       <span class="dpick ${sp==='date'?'on':''}"><button data-pd="-1" aria-label="전날">◀</button><input type="date" id="spDate" value="${pd}" max="${day}" aria-label="날짜 선택"><button data-pd="1" aria-label="다음날">▶</button></span></div></div>
@@ -408,6 +438,7 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
       <div class="chartbox"><div class="ct">습도(%) ${lg}</div>${dayChart(se,'h',{from,to})}</div>`;}
   $('#app').innerHTML=h;
   $('#app').querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{V.span=b.dataset.span;render();});
+  $('#app').querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{const k=b.dataset.tg;V.hide.has(k)?V.hide.delete(k):V.hide.add(k);render();});
   const goDate=async d=>{if(!d)return;if(day&&d>day)d=day;V.span='date';V.pdate=d;
     if(API){try{const ms=[...new Set([d.slice(0,7),dayShift(d,-1).slice(0,7)])];await Promise.all(ZONES.flatMap(z=>ms.map(m=>ensureMonth(z.id,m))));}catch(e){toast('불러오기 실패: '+e.message,'ng');}}
     render();};
@@ -417,7 +448,7 @@ function renderDash(){const g=globalLatest(),day=g?g.d:null,now=Date.now();
     t.onclick=go;t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};});
   $('#pDay').onclick=()=>{if(!day)return toast('출력할 데이터가 없습니다','ng');doPrint(printDay(day));};
   $('#pAll').onclick=async()=>{const ym=(day||todayStr()).slice(0,7);
-    if(API){toast('5개 구역 데이터를 불러오는 중...');try{for(const z of ZONES)await ensureMonth(z.id,ym);}catch(e){return toast('불러오기 실패: '+e.message,'ng');}}
+    if(API){toast(`${ZONES.length}개 구역 데이터를 불러오는 중...`);try{for(const z of ZONES)await ensureMonth(z.id,ym);}catch(e){return toast('불러오기 실패: '+e.message,'ng');}}
     doPrint(ZONES.map(z=>printSheet(z.id,ym)).join(''));};}
 
 /* ===== 구역 상세 ===== */
@@ -491,11 +522,11 @@ function printSheet(z,ym){const zo=zoneOf(z),[y,m]=ym.split('-');const dev=month
   return h;}
 function printDay(day){const se=ZONES.map(z=>({recs:(IDX[z.id]||{})[day]||[],color:z.color,name:z.name})).filter(x=>x.recs.length);
   const lg=se.map(x=>`<span style="color:${x.color};margin-right:10px">━ ${x.name}</span>`).join('');const g=globalLatest();
-  return `<div class="page"><div class="ph"><div class="ttl">품질팀 관리구역 온/습도 당일 현황</div><div class="ym">${day}<br>(${WK[wd(day)]})</div>${signBox()}</div>
+  return `<div class="page"><div class="ph"><div class="ttl">${G.sub} 온/습도 당일 현황</div><div class="ym">${day}<br>(${WK[wd(day)]})</div>${signBox()}</div>
     <div class="pstd">최종 기준 시간 ${g?g.d+' '+g.hm:'-'}   |   온도 ${stdText('t')}   |   습도 ${stdText('h')}</div>
     ${todayTable(day)}
-    <div class="pc" style="margin-top:6px"><div class="ct">온도(℃) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'t',{h:170})}</div>
-    <div class="pc"><div class="ct">습도(%) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'h',{h:170})}</div></div>`;}
+    <div class="pc" style="margin-top:6px"><div class="ct">온도(℃) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'t',{h:ZONES.length>5?125:170})}</div>
+    <div class="pc"><div class="ct">습도(%) <span style="font-size:10px">${lg}</span></div>${dayChart(se,'h',{h:ZONES.length>5?125:170})}</div></div>`;}
 function doPrint(html){const r=$('#print-root');r.innerHTML=html;setTimeout(()=>window.print(),80);}
 window.addEventListener('afterprint',()=>{$('#print-root').innerHTML='';});
 
@@ -515,13 +546,14 @@ function exportXlsx(z,ym){if(typeof XLSX==='undefined')return toast('엑셀 라�
   XLSX.writeFile(wb,`온습도_${zo.name}_${ym}.xlsx`);}
 
 /* ===== 설정 ===== */
-function openSettings(){const o=document.createElement('div');o.className='ov';
+function openSettings(){const o=document.createElement('div');o.className='ov';const L=limSet();
   const n=(id,v)=>`<input type="number" step="0.5" id="${id}" value="${v}">`;
   const maps=Object.entries(S.sensorMap);
   o.innerHTML=`<div class="card" style="max-width:720px"><h3>설정</h3>
-  <fieldset><legend>온도(℃)</legend><div class="row"><label>관리기준</label>${n('tMin',S.tMin)} ~ ${n('tMax',S.tMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('tLimMin',S.tLimMin)} ~ ${n('tLimMax',S.tLimMax)}</div>
+  <div class="hint" style="font-weight:800;color:var(--navy)">아래 온도·습도 기준은 [${G.name}] 그룹에만 적용됩니다. 다른 그룹은 상단에서 그룹을 바꾼 뒤 설정하세요.</div>
+  <fieldset><legend>온도(℃) — ${G.name}</legend><div class="row"><label>관리기준</label>${n('tMin',L.tMin)} ~ ${n('tMax',L.tMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('tLimMin',L.tLimMin)} ~ ${n('tLimMax',L.tLimMax)}</div>
    <div class="hint">측정기 사용 온도범위를 확인하면 사용범위에 입력하세요. 관리기준과 같으면 초과 즉시 빨강(한계 이탈)으로 표시됩니다.</div></fieldset>
-  <fieldset><legend>습도(%)</legend><div class="row"><label>관리기준</label>${n('hMin',S.hMin)} ~ ${n('hMax',S.hMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('hLimMin',S.hLimMin)} ~ ${n('hLimMax',S.hLimMax)}</div></fieldset>
+  <fieldset><legend>습도(%) — ${G.name}</legend><div class="row"><label>관리기준</label>${n('hMin',L.hMin)} ~ ${n('hMax',L.hMax)}<label style="margin-left:14px">사용범위(한계)</label>${n('hLimMin',L.hLimMin)} ~ ${n('hLimMax',L.hLimMax)}</div></fieldset>
   <fieldset><legend>체크시트 기록 시각</legend><div class="row"><label>오전</label><input type="time" id="am0" value="${S.am[0]}"> ~ <input type="time" id="am1" value="${S.am[1]}">
    <label style="margin-left:14px">오후</label><input type="time" id="pm0" value="${S.pm[0]}"> ~ <input type="time" id="pm1" value="${S.pm[1]}"></div>
    <div class="hint">구간 안의 첫 측정값을 오전/오후 칸에 넣습니다.</div>
@@ -540,7 +572,7 @@ function openSettings(){const o=document.createElement('div');o.className='ov';
     if(Object.values(nw).some(isNaN))return toast('숫자를 모두 입력하세요','ng');
     if(nw.tMin>=nw.tMax||nw.hMin>=nw.hMax)return toast('관리기준 하한이 상한보다 작아야 합니다','ng');
     if(nw.tLimMin>nw.tMin||nw.tLimMax<nw.tMax||nw.hLimMin>nw.hMin||nw.hLimMax<nw.hMax)return toast('사용범위는 관리기준을 포함해야 합니다','ng');
-    Object.assign(S,nw);S.am=[o.querySelector('#am0').value,o.querySelector('#am1').value];S.pm=[o.querySelector('#pm0').value,o.querySelector('#pm1').value];
+    Object.assign(limSet(),nw);S.am=[o.querySelector('#am0').value,o.querySelector('#am1').value];S.pm=[o.querySelector('#pm0').value,o.querySelector('#pm1').value];
     S.stale=Math.max(1,parseInt(o.querySelector('#stale').value)||3);
     const nu=o.querySelector('#apiUrl').value.trim();
     if(nu!==API){API=nu;await idbSet('api',nu);ZL={};SVER='';for(const k in monthLoaded)delete monthLoaded[k];
@@ -583,6 +615,9 @@ async function tick(){let ch=false;if(API)ch=await refreshRecent();
   if(V.name==='dash'&&!modal)render();else{renderHeader();if(ch&&V.name==='detail'&&!modal)renderDetail();}}
 ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{lastInput=Date.now();},{passive:true}));
 
+function setGroup(k){if(!GROUPS[k]||k===GK)return;GK=k;G=GROUPS[k];ZONES=G.zones;V.name='dash';V.zone=ZONES[0].id;V.ym=null;V.hide.clear();
+  try{const u=new URL(location.href);if(k==='qc')u.searchParams.delete('g');else u.searchParams.set('g',k);history.replaceState(null,'',u);}catch(e){} // 미리보기·일부 iframe에서는 주소 변경이 막혀 있어도 전환은 계속
+  render();window.scrollTo(0,0);}
 /* ===== 시작 ===== */
 function render(){renderHeader();if(V.name==='detail')renderDetail();else renderDash();}
 $('#btnUpload').onclick=()=>$('#file').click();
